@@ -7,7 +7,7 @@ accent_color: teal
 github: https://github.com/bencoton/build-in-public-studio
 deploy_url:
 started: 2026-05-24
-last_updated: 2026-05-24
+last_updated: 2026-05-25
 audience: solo devs and indie hackers shipping in public who want a weekly rhythm without writing every post from scratch
 public: true
 ---
@@ -26,7 +26,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 ## Current phase
 
-**Phase 0 — Scaffolding.** Goal: the dashboard renders, the docs are in place, the GitHub repo exists, and the deploy pipeline (local `npm run dev`) is green before any feature code goes near `better-sqlite3` or the Anthropic SDK.
+**Phase 1 — Local MVP.** Stage 1 complete (scaffold + docs + WyCo brand + first commit pushed). Starting Stage 2 next: SQLite schema and the `/notes` page.
 
 ---
 
@@ -34,7 +34,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 <!-- Reverse-chronological log. Append new bullets at the top with each user-visible change. Each bullet: YYYY-MM-DD — what shipped. -->
 
-- (nothing yet — first commit pending)
+- **2026-05-25** — Stage 1 shipped: project docs in place, WyCo-branded dashboard renders on localhost:3000, private GitHub repo created at bencoton/build-in-public-studio, first commit pushed.
 
 ---
 
@@ -42,12 +42,12 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 **This week:**
 
-- Stage 1 — docs + WyCo-branded scaffold, first commit pushed to a private repo.
 - Stage 2 — SQLite schema (drafts, notes, repos, settings, ratings) and the /notes page (textarea + recent-notes list, markdown supported).
+- Stage 3 — Settings page, with step-by-step walk-throughs for getting the Anthropic key and the GitHub fine-grained token.
 
 **Next week:**
 
-- Stage 3 — Settings page, with step-by-step walk-throughs for getting the Anthropic key and the GitHub fine-grained token.
+- Stage 4 — GitHub sync via Octokit. Watched repos in Settings; commits pulled and displayed raw on a debug page.
 
 ---
 
