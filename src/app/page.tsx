@@ -7,19 +7,42 @@ import {
 } from "@/components/ui/card";
 import { Sparkles } from "lucide-react";
 
-import { getLatestGeneration } from "@/lib/moments";
+import { getLatestGeneration, type MomentWithDrafts } from "@/lib/moments";
 import { relativeTime } from "@/lib/format";
 
 import { GenerateNowButton } from "@/components/dashboard/generate-now-button";
 import { MomentCard } from "@/components/dashboard/moment-card";
+import {
+  ProjectTabs,
+  type ProjectTab,
+} from "@/components/dashboard/project-tabs";
 
 // The real dashboard. Server-renders the latest generation's moments;
 // each moment card is a client component that owns the edit / regenerate /
-// approve / reject lifecycle for its two variants.
+// approve / reject lifecycle for its two variants. Project tabs above the
+// list let you focus on one project at a time and see at a glance which
+// projects are fully actioned.
 
-export default function DashboardPage() {
+type SearchParams = Record<string, string | string[] | undefined>;
+
+export default function DashboardPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   const moments = getLatestGeneration();
   const latestAt = moments[0]?.created_at;
+
+  const rawProject =
+    typeof searchParams.project === "string" ? searchParams.project : "all";
+  const { tabs, activeKey, filteredMoments } = buildProjectView(
+    moments,
+    rawProject,
+  );
+
+  const approvedCount = filteredMoments.filter((m) =>
+    m.drafts.some((d) => d.status === "approved"),
+  ).length;
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -61,21 +84,114 @@ export default function DashboardPage() {
         </Card>
       ) : (
         <section className="space-y-4">
+          <ProjectTabs tabs={tabs} activeKey={activeKey} />
+
           <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-            {moments.length} moment{moments.length === 1 ? "" : "s"} —{" "}
-            {moments.filter((m) =>
-              m.drafts.some((d) => d.status === "approved"),
-            ).length}{" "}
-            with an approved variant
+            {filteredMoments.length} moment
+            {filteredMoments.length === 1 ? "" : "s"}
+            {activeKey !== "all" && ` in ${prettyKey(activeKey)}`} —{" "}
+            {approvedCount} with an approved variant
           </h3>
 
-          <div className="space-y-4">
-            {moments.map((moment) => (
-              <MomentCard key={moment.id} moment={moment} />
-            ))}
-          </div>
+          {filteredMoments.length === 0 ? (
+            <Card>
+              <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                No moments in this project for the latest generation.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {filteredMoments.map((moment) => (
+                <MomentCard key={moment.id} moment={moment} />
+              ))}
+            </div>
+          )}
         </section>
       )}
     </div>
   );
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * Group the latest generation's moments by project, compute the tab list
+ * (with allActioned flag), and filter the moments to the active tab.
+ *
+ * Tab order: All, General, then projects alphabetically. Stable across renders.
+ */
+function buildProjectView(
+  moments: MomentWithDrafts[],
+  rawActiveKey: string,
+): {
+  tabs: ProjectTab[];
+  activeKey: string;
+  filteredMoments: MomentWithDrafts[];
+} {
+  // Bucket moments by project key. NULL repo → "general".
+  const buckets = new Map<string, MomentWithDrafts[]>();
+  for (const m of moments) {
+    const key = m.repo ?? "general";
+    const list = buckets.get(key) ?? [];
+    list.push(m);
+    buckets.set(key, list);
+  }
+
+  // Decide the active key — fall back to "all" if the URL points to a project
+  // that has no moments this week (stale link).
+  const activeKey = rawActiveKey === "all" || buckets.has(rawActiveKey) ? rawActiveKey : "all";
+
+  // Build tabs. "All" first, then "General" if present, then projects sorted.
+  const tabs: ProjectTab[] = [];
+  tabs.push({
+    key: "all",
+    label: "All",
+    count: moments.length,
+    allActioned: moments.length > 0 && moments.every(momentFullyActioned),
+  });
+
+  if (buckets.has("general")) {
+    const list = buckets.get("general")!;
+    tabs.push({
+      key: "general",
+      label: "General",
+      count: list.length,
+      allActioned: list.every(momentFullyActioned),
+    });
+  }
+
+  const projectKeys = Array.from(buckets.keys())
+    .filter((k) => k !== "general")
+    .sort();
+  for (const key of projectKeys) {
+    const list = buckets.get(key)!;
+    tabs.push({
+      key,
+      label: key,
+      count: list.length,
+      allActioned: list.every(momentFullyActioned),
+    });
+  }
+
+  // Filter moments to the active tab.
+  const filteredMoments =
+    activeKey === "all"
+      ? moments
+      : (buckets.get(activeKey) ?? []);
+
+  return { tabs, activeKey, filteredMoments };
+}
+
+/**
+ * A moment is "fully actioned" when EVERY one of its draft variants has been
+ * decided — approved, rejected, or posted. Any variant still in 'draft' means
+ * there's still a decision to make.
+ */
+function momentFullyActioned(moment: MomentWithDrafts): boolean {
+  return moment.drafts.every((d) => d.status !== "draft");
+}
+
+function prettyKey(key: string): string {
+  if (key === "general") return "General";
+  return key;
 }
