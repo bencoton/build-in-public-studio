@@ -39,6 +39,58 @@ Each stage stops for verification before the next starts.
 
 ---
 
+---
+
+## Phase 1.5 — Product summaries + scheduled-batch posting
+
+*Added 2026-05-25 mid-build after Ben used the working tool and surfaced two missing capabilities. Both are real product extensions, not polish. Scoped together with Ben before pausing.*
+
+### 1.5a — Product summaries (per-project, structured)
+
+**Goal:** generate product-level marketing copy from the project's metadata + history, separate from the weekly moment-drafting flow.
+
+**Two outputs per run:**
+
+1. **Website summary** — structured: tagline (≤80 chars) + 2-3 paragraphs of about-page prose + a short feature list. Drawn from `PROJECT.md`, recent commits, recent notes.
+2. **Launch announcement** — an X thread + an Indie Hackers long-form that *announce* the product, written in the user's build-in-public voice. Leans into the "100% Claude-generated" credibility hook.
+
+**Scope:** per-project (run once per repo). Lives on a new sidebar item, "Summaries". Outputs persist in a new `summaries` table — schema TBD but probably `{id, repo, kind, content_structured (JSON), created_at}`.
+
+**Done when:**
+
+- New "Summaries" page accessible from the sidebar.
+- Project picker on the page.
+- Two buttons: "Generate website summary" / "Generate launch announcement".
+- Each output rendered with copy-to-clipboard.
+- Outputs persist across sessions so the user can refer back without regenerating.
+
+### 1.5b — Batch from previous work + scheduling
+
+**Goal:** generate 10–15 moments from a custom historical window (longer than 7 days) and stagger their release across the coming weeks. Lets the user "catch users up on the journey" for products that have been quietly in development.
+
+**Scope:**
+
+- Custom time window. Presets: 30 / 90 / 180 days / "since project start" (uses the repo's first commit). Per-project.
+- Generates more moments than the weekly batch — say 10–15 (configurable). May need `max_moments` parameter on `generateDrafts()`.
+- **Auto-suggested release dates with user override** — auto-stagger one per ~2 days starting tomorrow, user can drag/edit each date.
+- New `scheduled_for TEXT` column on `drafts` (nullable, ISO timestamp).
+- New "Queue" view (probably `/queue`) — calendar-style or date-sorted list of scheduled posts. Status shows "Due soon" when within 24h, "Due now" past the date.
+- Desktop notification when a scheduled post's date arrives — reuses Stage 9's notification plumbing. **Never auto-publishes** per the Copy+Open philosophy.
+
+**Done when:**
+
+- "Generate batch from history" flow on the Summaries page (or a new page).
+- Window selector + moment-count input.
+- Generated batch renders with editable per-post dates.
+- "Queue" sidebar item shows upcoming scheduled posts.
+- Notification fires when a post's scheduled time arrives.
+
+### Sequencing recommendation
+
+Build Stage 9 first — its notification + cron infrastructure is the foundation that 1.5b reuses. Then 1.5a (smaller, independent, immediately useful). Then 1.5b. Then Stage 10 polish. Then Phase 2 OSS launch.
+
+---
+
 ## Phase 2 — OSS launch
 
 **Goal:** the GitHub repo flips to public and the project is presented as a finished local tool that anyone can clone and run. This is the credibility milestone.

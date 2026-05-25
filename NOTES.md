@@ -4,6 +4,19 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-05-25 — Session end: Phase 1.5 scoped, pause for real use
+
+Ben surfaced two new features after using the tool end-to-end:
+
+1. **Product summaries** (per-project, structured) — website summary + launch announcement. Separate from the weekly moment flow.
+2. **Batch from previous work + scheduling** — generate 10–15 moments from a longer window (30/90/180 days), auto-suggest staggered release dates over the next 2-3 weeks, queue view with date-based notifications. Never auto-publishes.
+
+Both documented as **Phase 1.5** in `docs/PLAN.md` with the scope decisions captured. Sequencing recommendation: Stage 9 first (notification foundation), then 1.5a (Summaries — smaller, faster), then 1.5b (Batch + scheduling — reuses Stage 9's notifications), then Stage 10 polish, then Phase 2 OSS launch.
+
+**Session totals:** 8 of 10 original stages shipped (Stages 1–8 + market research + project linkage + dashboard project tabs + UX polish on pill tabs). 4 bug-class lessons captured in `CLAUDE.md` (BIPS-L1 through L4, all `node:sqlite`-related or Cowork-sandbox-related). All committed and pushed.
+
+Pause for real Monday-morning use. Stage 9 / 1.5a / 1.5b / Stage 10 wait for next session.
+
 ## 2026-05-25 — Stages 7 + 8 + project linkage + dashboard polish shipped
 
 This batch covers everything from the end of Stage 6 through to the pill-style project tabs, since we deferred docs commits until the run of stages closed out.

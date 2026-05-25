@@ -8,7 +8,6 @@ github: https://github.com/bencoton/build-in-public-studio
 deploy_url:
 started: 2026-05-24
 last_updated: 2026-05-25
-last_session_progress: 2026-05-25
 audience: solo devs and indie hackers shipping in public who want a weekly rhythm without writing every post from scratch
 public: true
 ---
@@ -51,14 +50,18 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 ## Up next
 
-**This week:**
+**This week:** *(nothing pinned — pausing after the marathon session of 2026-05-25 to use the tool for real before adding more)*
 
-- Stage 9 — Scheduler (node-cron, Mondays 9am UK) + desktop notification on completion. "Last run / Next run" indicator in the header (currently shows em-dashes as placeholder).
-- Stage 10 — Polish pass: light-mode toggle (next-themes), loading skeletons on the dashboard, better empty states, error-boundary coverage, micro-animations.
+**Next session — pick from these (rough sequencing recommendation):**
 
-**Next week (Phase 2):**
+1. **Stage 9** — Scheduler (node-cron, Mondays 9am UK) + desktop notification system. Foundation for both the weekly cron and Phase 1.5b's scheduled-post notifications.
+2. **Phase 1.5a** — Product summaries. Two new generation modes per project: website summary (structured: tagline + paragraphs + feature list) and launch announcement (X thread + IH long-form). Surfaced on a new sidebar item, "Summaries".
+3. **Phase 1.5b** — Batch from previous work + scheduling. Custom time window (last 30/90/180 days or "since project start"), generates 10–15 moments, auto-staggers dates over next 2–3 weeks (user can adjust). `scheduled_for` column on drafts; new "Queue" view sorted by date. Reuses Stage 9's notification plumbing to ping when a scheduled post is due.
+4. **Stage 10** — Polish: light-mode toggle, loading skeletons, error boundaries, micro-animations.
 
-- OSS launch — flip the GitHub repo to public, draft a launch X-thread + IH long-form using the tool itself, post to Indie Hackers + X.
+**Phase 2 (later):**
+
+- OSS launch — flip the GitHub repo to public, polish the README with screenshots, **draft the launch posts using the tool itself**, post to Indie Hackers + X.
 
 ---
 
