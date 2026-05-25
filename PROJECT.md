@@ -26,7 +26,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 ## Current phase
 
-**Phase 1 — Local MVP.** Stages 1–8 complete. The app does its full core job end-to-end: pulls commits + notes, drafts moments via Claude, lets you edit / regenerate / approve / reject / Copy+Open / mark-posted per variant, and lets you star posts that worked so the voice loop learns over time. Notes and moments are project-aware; the dashboard filters by project as pill tabs that turn lime when fully actioned. Stages 9 (scheduler + desktop notifications) and 10 (polish + light-mode toggle) are the remaining feature stages before the Phase 2 OSS launch.
+**Phase 1b — Tech stack migration.** Stages 1–8 of Phase 1 complete on the local Next.js + node:sqlite stack. Stage 9 (in-process node-cron scheduler) was attempted and abandoned after hitting five sequential webpack-vs-Node bug classes (BIPS-L5 + variants) — the instrumentation bundle pass is fundamentally hostile to Node-only code. **Pivoting to the WyCo standard stack: Supabase + Vercel.** Brings scheduling under Vercel Cron (first-class), replaces SQLite with Postgres, provides a live deployable URL for credibility. Sub-stages 9b.1 → 9b.4 track the migration; Stage 10 polish and Phase 1.5 features resume on the new stack.
 
 ---
 
@@ -50,14 +50,18 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 ## Up next
 
-**This week:** *(nothing pinned — pausing after the marathon session of 2026-05-25 to use the tool for real before adding more)*
+**This week (pivot in progress):**
 
-**Next session — pick from these (rough sequencing recommendation):**
+1. **Stage 9b.1** — Set up Supabase project, install CLI, write initial schema migration, link the project. *In progress.*
+2. **Stage 9b.2** — Port DB access layer (notes, commits, moments, drafts, settings, history) from node:sqlite to @supabase/supabase-js.
+3. **Stage 9b.3** — Deploy to Vercel. Live URL, private hobby tier.
+4. **Stage 9b.4** — Vercel Cron job for the Monday-9am-UK generation. Delete the old instrumentation + scheduler files.
 
-1. **Stage 9** — Scheduler (node-cron, Mondays 9am UK) + desktop notification system. Foundation for both the weekly cron and Phase 1.5b's scheduled-post notifications.
-2. **Phase 1.5a** — Product summaries. Two new generation modes per project: website summary (structured: tagline + paragraphs + feature list) and launch announcement (X thread + IH long-form). Surfaced on a new sidebar item, "Summaries".
-3. **Phase 1.5b** — Batch from previous work + scheduling. Custom time window (last 30/90/180 days or "since project start"), generates 10–15 moments, auto-staggers dates over next 2–3 weeks (user can adjust). `scheduled_for` column on drafts; new "Queue" view sorted by date. Reuses Stage 9's notification plumbing to ping when a scheduled post is due.
-4. **Stage 10** — Polish: light-mode toggle, loading skeletons, error boundaries, micro-animations.
+**Next session:**
+
+5. **Phase 1.5a** — Product summaries. Two new generation modes per project: website summary (structured: tagline + paragraphs + feature list) and launch announcement (X thread + IH long-form). Surfaced on a new sidebar item, "Summaries".
+6. **Phase 1.5b** — Batch from previous work + scheduling. Custom time window, generates 10–15 moments, auto-staggers release dates. Now trivial on the new stack: a `scheduled_for` column + an hourly Vercel Cron checks the queue.
+7. **Stage 10** — Polish: light-mode toggle, loading skeletons, error boundaries, micro-animations.
 
 **Phase 2 (later):**
 

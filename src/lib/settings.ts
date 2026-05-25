@@ -78,3 +78,16 @@ export function getStyleNotes(): string {
 export function setStyleNotes(notes: string): void {
   setSetting("style_notes", notes);
 }
+
+/**
+ * Last scheduled-run timestamp (ISO 8601, UTC). Set by the scheduler after
+ * each successful run. Used by the header to show "Last run: 3 days ago".
+ * Returns null if the scheduler has never fired yet on this machine.
+ */
+export function getLastRunAt(): string | null {
+  return getSetting("last_run_at") ?? null;
+}
+
+export function setLastRunAt(iso: string): void {
+  setSetting("last_run_at", iso);
+}

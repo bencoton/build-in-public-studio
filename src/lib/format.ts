@@ -13,6 +13,38 @@ export function displayProjectName(fullName: string): string {
 }
 
 /**
+ * "in 3 hours" / "in 2 days" formatter — the symmetric counterpart to
+ * relativeTime() below. Used by the dashboard header to show "Next run: in X".
+ * Returns the absolute date for anything more than ~5 weeks out.
+ */
+export function relativeFuture(input: string | Date): string {
+  const then = typeof input === "string" ? parseSqliteTimestamp(input) : input;
+
+  const seconds = Math.max(0, Math.round((then.getTime() - Date.now()) / 1000));
+
+  if (seconds < 60) return seconds <= 5 ? "any moment" : `in ${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `in ${minutes} minute${minutes === 1 ? "" : "s"}`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `in ${hours} hour${hours === 1 ? "" : "s"}`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `in ${days} day${days === 1 ? "" : "s"}`;
+  const weeks = Math.round(days / 7);
+  if (weeks < 5) return `in ${weeks} week${weeks === 1 ? "" : "s"}`;
+
+  return `on ${then.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })}`;
+}
+
+/** Shared SQLite-timestamp → Date parser. Pinned to UTC. */
+function parseSqliteTimestamp(input: string): Date {
+  return new Date(input.replace(" ", "T") + (input.endsWith("Z") ? "" : "Z"));
+}
+
+/**
  * Tiny "5 minutes ago" formatter — avoids pulling in date-fns just for this.
  * Stage 9 (the cron scheduler) will need real timezone handling and at that
  * point we add date-fns properly.
@@ -23,11 +55,7 @@ export function displayProjectName(fullName: string): string {
  */
 export function relativeTime(input: string | Date): string {
   const then =
-    typeof input === "string"
-      ? // Replace the space SQLite uses with a "T" and pin to UTC so JavaScript
-        // doesn't accidentally interpret it as local time.
-        new Date(input.replace(" ", "T") + (input.endsWith("Z") ? "" : "Z"))
-      : input;
+    typeof input === "string" ? parseSqliteTimestamp(input) : input;
 
   const seconds = Math.max(0, Math.round((Date.now() - then.getTime()) / 1000));
 

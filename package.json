@@ -19,7 +19,9 @@
     "lucide-react": "^0.460.0",
     "tailwindcss-animate": "^1.0.7",
     "octokit": "^4.0.2",
-    "@anthropic-ai/sdk": "^0.30.1"
+    "@anthropic-ai/sdk": "^0.30.1",
+    "cron-parser": "^4.9.0",
+    "@supabase/supabase-js": "^2.45.4"
   },
   "devDependencies": {
     "typescript": "^5",

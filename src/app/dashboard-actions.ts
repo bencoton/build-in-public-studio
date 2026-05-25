@@ -10,6 +10,7 @@ import {
 import { regenerateDraft, type RegenerateResult } from "@/lib/claude-regenerate";
 import { generateDrafts, type GenerationResult } from "@/lib/claude";
 import { markDraftAsPosted } from "@/lib/posting";
+import { setLastRunAt } from "@/lib/settings";
 
 // ── Generic result types ─────────────────────────────────────────────────
 
@@ -104,6 +105,10 @@ export async function markPostedAction(
 export async function generateAllDraftsAction(): Promise<GenerateActionResult> {
   try {
     const result = await generateDrafts();
+    // Record this as the "last run" so the header updates whether the
+    // trigger was cron or a manual click — semantics: time of last
+    // successful generation, regardless of source.
+    setLastRunAt(new Date().toISOString());
     revalidatePath("/");
     return { ok: true, result };
   } catch (err) {

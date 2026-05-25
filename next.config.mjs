@@ -1,8 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // No externalPackages override needed — we're using node:sqlite, which is
-  // a Node.js built-in (not an npm package). Next.js's bundler recognises
-  // node: imports natively and leaves them as runtime requires.
+  // Stage 9 (in-process scheduler) was abandoned in favour of Vercel Cron Jobs.
+  // The `experimental.instrumentationHook` flag is no longer needed.
 };
 
 export default nextConfig;
