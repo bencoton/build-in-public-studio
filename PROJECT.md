@@ -26,7 +26,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 ## Current phase
 
-**Phase 1 — Local MVP.** Stages 1–2 complete. Storage layer in place (node:sqlite, no native binding), /notes page can save and list. Stage 3 next: Settings page + walk-throughs for the Anthropic and GitHub keys.
+**Phase 1 — Local MVP.** Stages 1–3 complete. Both API keys validated, watched repos selected, schedule + tone preferences saved. Stage 4 next: pull commits from watched repos with Octokit, cache them in SQLite, render raw on a debug page.
 
 ---
 
@@ -34,6 +34,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 <!-- Reverse-chronological log. Append new bullets at the top with each user-visible change. Each bullet: YYYY-MM-DD — what shipped. -->
 
+- **2026-05-25** — Stage 3 shipped: Settings page with API-key status cards, inline "how to get this key" walk-throughs for Anthropic and GitHub, smoke-test buttons that hit each API for real, watched-repos multi-select fed by the user's GitHub repo list, and schedule + banned-words + style-notes preferences persisting to the `settings` table.
 - **2026-05-25** — Stage 2 shipped: SQLite via Node's built-in `node:sqlite` module (no native bindings, no Visual Studio Build Tools dependency). Notes page saves and lists with relative timestamps. Full schema for the whole app created on first boot (notes, watched_repos, commits, moments, drafts, settings).
 - **2026-05-25** — Stage 1 shipped: project docs in place, WyCo-branded dashboard renders on localhost:3000, private GitHub repo created at bencoton/build-in-public-studio, first commit pushed.
 
@@ -43,12 +44,12 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 **This week:**
 
-- Stage 3 — Settings page, with step-by-step walk-throughs for getting the Anthropic key and the GitHub fine-grained token. Both keys validated by smoke-test calls before the stage closes.
-- Stage 4 — GitHub sync via Octokit. Watched repos selected in Settings; the last 7 days of commits pulled and rendered raw on a debug page.
+- Stage 4 — GitHub sync via Octokit. The last 7 days of commits from each watched repo, pulled and cached in SQLite, rendered raw on a `/debug/commits` page with a manual "Sync now" trigger.
+- Stage 5 — Claude drafting for one moment, rendering structured JSON output. The first end-to-end "GitHub commits + notes → draft post" round trip.
 
 **Next week:**
 
-- Stage 5 — Claude drafting for one moment, rendering structured JSON output. The first end-to-end "GitHub commits + notes → draft post" round trip.
+- Stage 6 — Full dashboard with both draft variants per moment, edit / regenerate / approve / reject buttons.
 
 ---
 

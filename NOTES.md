@@ -4,6 +4,16 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-05-25 — Stage 3 shipped
+
+- Settings page now does four things: shows API-key state (read from `.env.local` server-side, never the database), validates each key with a tiny real API call, lists the user's GitHub repos for multi-select watching, persists schedule + banned-words + style-notes to the `settings` table.
+- API keys deliberately stay in `.env.local` (per WyCo "Secrets never in the client"). The UI just shows binary state — "Set" or "Not set" — and triggers smoke-test calls. The key values themselves never leave the server-side env.
+- Validation uses plain `fetch` rather than the SDKs. Defers `octokit` and `@anthropic-ai/sdk` to Stages 4 and 5 where they're actually needed for pagination + structured output / caching.
+- Inline `<details>` "How to get this key" walk-throughs sit next to each card — beginner-friendly, no need to context-switch to the README.
+- New shadcn-style `Badge` component for status pills. Variants: `success` (teal), `warning` (amber), `destructive`, `secondary` — covers all the states we care about.
+- Schedule cron stays a plain string for now (full validation is a Stage 9 problem when the scheduler actually runs).
+- Ben validated both keys, selected a handful of repos to watch, and saved preferences end-to-end.
+
 ## 2026-05-25 — Stage 2 shipped
 
 - SQLite layer set up with **`node:sqlite`** (Node's built-in SQLite, stable in Node 22.5+ / fully stable in Node 24) instead of `better-sqlite3`. Decision driven by a real install failure: better-sqlite3 has no prebuilt binary for Node 24.14, and Ben doesn't have Visual Studio Build Tools to compile from source. Switching to a built-in removed a dependency rather than adding one — closer to the WyCo "prefer fewer deps" principle.
