@@ -4,6 +4,28 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-05-25 — Stages 7 + 8 + project linkage + dashboard polish shipped
+
+This batch covers everything from the end of Stage 6 through to the pill-style project tabs, since we deferred docs commits until the run of stages closed out.
+
+**Stage 7 — Copy + Open flow.** Approved variants get a real "Copy + Open X / Indie Hackers" button (the Stage 6 placeholder is gone). Click does three things at once: copies to clipboard, opens the platform's compose URL in a new tab, transitions a local panel to "Copied — paste with Ctrl/Cmd+V". A "Did you publish it?" prompt then appears after 60s OR the moment focus returns to the dev tab (whichever first — the focus event is the natural "I'm done publishing" signal). Save URL → status flips to "posted", URL + timestamp persisted. "Posted" state is DB-backed and permanent. The simpler "Not yet" / 60s timeout collapses cleanly back to the Copy + Open button.
+
+**Stage 8 — History + voice learning.** New `/history` page, server-rendered, four URL-driven filters (status / variant / rating / project). Per-row rating buttons (★ / – / 👎) with optimistic UI and toggle behaviour. The voice loop: every full generation pulls up to 10 random starred drafts (posted-and-starred preferred over just-starred) and injects them into the user message as voice examples, with explicit instructions to match rhythm + specificity without pastiching. Adds ~500–2000 input tokens per generation depending on how many starred drafts exist.
+
+**Project linkage.** Mid-stage feature ask: notes and moments needed to be project-aware. Added `repo` column to both `notes` and `moments` via a new `addColumnIfMissing()` migration helper in `db.ts` (since `node:sqlite` doesn't ship migration tooling — checks `pragma_table_info` then `ALTER TABLE ADD COLUMN` if missing, idempotent, safe). Note form has a "Link to project" select; moments derive repo at insert time by looking up source refs (commit SHAs → commits.repo, note ids → notes.repo, common-repo-if-all-match-else-null). History got a fourth filter dropdown for project.
+
+**Dashboard project tabs + UX polish.** Tabs above the moment list, server-rendered as `<Link>`s, no client state. Pill-button styling — three colour states: default (muted), active (teal fill), all-actioned (lime fill or tint depending on active state). "All actioned" means every draft of every moment in that project is out of `draft` state. Tabs only render when there's more than one bucket — single-project weeks don't get a noisy tab bar. URL-driven (?project=owner/name) so back/forward works.
+
+**`displayProjectName()` helper** strips the "owner/" prefix everywhere a project name is visible — dashboard tabs, dashboard heading, history badges, history filter dropdown, notes badges. DB and URL params keep the full "owner/name" for stability (no collisions if two repos share a name).
+
+**Bug fixes captured as lessons during this batch:**
+- **BIPS-L3:** `node:sqlite` has no `.transaction()` helper. Hit during Stage 5; the `transaction()` helper in `db.ts` is the fix. Used by `insertMomentWithDrafts`.
+- **BIPS-L4:** `node:sqlite` returns null-prototype rows; spread them before crossing the Server → Client component boundary. Hit during Stage 6; `getLatestGeneration` and `getAllDrafts` now `.map(r => ({...r}))` defensively.
+
+**Note for future:**
+- Voice-learning loop is wired but Ben deferred testing it — wants to play with the qualitative output later.
+- We've drifted further from the "same commit as user-visible change" rule for PROJECT.md updates. This entry batches docs for ~5 user-visible changes shipped across the session. Worth tightening if we get back into a normal weekly cadence rather than marathon sessions.
+
 ## 2026-05-25 — Stage 6 shipped
 
 - The dashboard is the real dashboard now. Latest generation's moments at `/`, one card each, hand-rolled tabs (no `@radix-ui/react-tabs` dep — two-tab toggles don't justify it). Each variant card owns its own edit / regenerate / approve / reject / revert lifecycle as a client component.
