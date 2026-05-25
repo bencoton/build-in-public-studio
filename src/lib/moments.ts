@@ -7,6 +7,7 @@ export type MomentRow = {
   source_ref: string | null; // JSON array of strings
   generation_id: string;
   created_at: string;
+  repo: string | null; // "owner/name" derived at insert time from source refs, or NULL
 };
 
 export type DraftRow = {

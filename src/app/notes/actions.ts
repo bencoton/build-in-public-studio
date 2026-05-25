@@ -23,6 +23,10 @@ export async function saveNoteAction(
 ): Promise<SaveNoteResult> {
   const raw = formData.get("content");
   const content = typeof raw === "string" ? raw.trim() : "";
+  // The "general" option submits an empty string; treat that and undefined the
+  // same way (NULL repo). Any other value is the "owner/name" of a watched repo.
+  const rawRepo = formData.get("repo");
+  const repo = typeof rawRepo === "string" && rawRepo.trim() !== "" ? rawRepo.trim() : null;
 
   if (!content) {
     return { ok: false, error: "Write something first — empty notes aren't saved." };
@@ -33,7 +37,7 @@ export async function saveNoteAction(
   }
 
   try {
-    addNote(content);
+    addNote(content, repo);
   } catch (err) {
     // Real error path — surface to the UI rather than fail silently.
     // (See docs/Ways-of-Working.md Part 8: never swallow errors.)

@@ -6,6 +6,7 @@ import { getBannedWords, getStyleNotes } from "./settings";
 import { getRecentNotes } from "./notes";
 import { getRecentCommits } from "./commits";
 import { insertMomentWithDrafts } from "./moments";
+import { getStarredExamples, type HistoryDraft } from "./history";
 import { DRAFT_SYSTEM_PROMPT } from "@/prompts/draft-system";
 
 /*
@@ -121,11 +122,16 @@ export async function generateDrafts(): Promise<GenerationResult> {
 
   const userBannedWords = getBannedWords();
   const styleNotes = getStyleNotes();
+  // Voice-learning loop: pull up to 10 random starred drafts as examples.
+  // Posted-and-starred entries are preferred (see getStarredExamples).
+  const voiceExamples = getStarredExamples(10);
+
   const userMessage = buildUserMessage({
     commits,
     notes,
     userBannedWords,
     styleNotes,
+    voiceExamples,
   });
 
   const client = new Anthropic({
@@ -198,6 +204,7 @@ function buildUserMessage(args: {
   notes: ReturnType<typeof getRecentNotes>;
   userBannedWords: string[];
   styleNotes: string;
+  voiceExamples: HistoryDraft[];
 }): string {
   const parts: string[] = [];
 
@@ -236,6 +243,31 @@ function buildUserMessage(args: {
     parts.push("## User-configured style notes\n");
     parts.push(args.styleNotes.trim());
     parts.push("");
+  }
+
+  // Voice examples — the heart of the learning loop. Show Claude what the
+  // user has marked as "this worked", with whether it was actually posted as
+  // a stronger signal.
+  if (args.voiceExamples.length > 0) {
+    parts.push(
+      `## Voice examples (${args.voiceExamples.length} starred posts from history)`,
+    );
+    parts.push(
+      "These are drafts the user marked as ★ — posts that worked for them. Match the rhythm, sentence length, sentence structure, and degree of specificity. Do NOT copy them. Do NOT pastiche them. Use them as a tuning signal for the voice rules in the system prompt.",
+    );
+    parts.push("");
+    for (let i = 0; i < args.voiceExamples.length; i++) {
+      const ex = args.voiceExamples[i];
+      const variantLabel =
+        ex.variant === "x_thread" ? "X thread" : "Indie Hackers long-form";
+      const postedLabel = ex.status === "posted" ? " · posted" : "";
+      parts.push(
+        `### Example ${i + 1} (${variantLabel}${postedLabel})`,
+      );
+      parts.push(ex.content);
+      parts.push("");
+    }
+    parts.push("---\n");
   }
 
   parts.push(

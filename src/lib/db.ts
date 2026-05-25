@@ -101,6 +101,30 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_drafts_moment ON drafts(moment_id);
 `);
 
+// ── Incremental migrations ───────────────────────────────────────────────
+//
+// SQLite has ALTER TABLE ADD COLUMN but no IF NOT EXISTS. We check the table
+// schema first via pragma_table_info, then add the column if it's missing.
+// This pattern lets us evolve the schema without a real migration tool —
+// fine for a single-user local app, would not scale to multi-tenant.
+
+function addColumnIfMissing(table: string, column: string, definition: string) {
+  const rows = db
+    .prepare(`SELECT name FROM pragma_table_info(?)`)
+    .all(table) as Array<{ name: string }>;
+  if (rows.some((r) => r.name === column)) return;
+  // Definition must be a literal — never interpolate user input here.
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+// Migration: link notes to a watched repo (added 2026-05-25). NULL = general.
+addColumnIfMissing("notes", "repo", "TEXT");
+// Migration: persist a moment's primary repo (added 2026-05-25), derived from
+// its source refs at insert time. NULL = general / multi-repo / unknown.
+addColumnIfMissing("moments", "repo", "TEXT");
+db.exec(`CREATE INDEX IF NOT EXISTS idx_moments_repo ON moments(repo);`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_notes_repo ON notes(repo);`);
+
 export { db };
 
 /**

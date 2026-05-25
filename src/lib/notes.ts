@@ -5,6 +5,7 @@ export type NoteRow = {
   id: number;
   content: string;
   created_at: string;
+  repo: string | null; // "owner/name" linking to a watched repo, or NULL for general
 };
 
 /**
@@ -12,20 +13,24 @@ export type NoteRow = {
  * (the server action) should already have validated, but we double-check here
  * because cheap.
  *
+ * @param repo optional "owner/repo" string linking the note to a project.
+ *             Pass null (or omit) for a general / unlinked note.
+ *
  * Note on typing: node:sqlite's .prepare() returns a StatementSync whose
  * methods return `Record<string, SQLOutputValue>`. We assert the shape after
  * the call since the schema is fixed and we control both ends.
  */
-export function addNote(content: string): NoteRow {
+export function addNote(content: string, repo: string | null = null): NoteRow {
   const trimmed = content.trim();
   if (!trimmed) {
     throw new Error("Note content is empty.");
   }
+  const cleanRepo = repo && repo.trim().length > 0 ? repo.trim() : null;
   // RETURNING is supported by the SQLite version that ships with Node 22.5+.
   const stmt = db.prepare(
-    "INSERT INTO notes (content) VALUES (?) RETURNING id, content, created_at",
+    "INSERT INTO notes (content, repo) VALUES (?, ?) RETURNING id, content, created_at, repo",
   );
-  const row = stmt.get(trimmed) as NoteRow | undefined;
+  const row = stmt.get(trimmed, cleanRepo) as NoteRow | undefined;
   if (!row) {
     throw new Error("Failed to insert note.");
   }
@@ -39,12 +44,20 @@ export function addNote(content: string): NoteRow {
 export function getRecentNotes(limit = 50): NoteRow[] {
   const safeLimit = Math.min(Math.max(1, Math.floor(limit)), 200);
   const stmt = db.prepare(
-    `SELECT id, content, created_at
+    `SELECT id, content, created_at, repo
        FROM notes
        ORDER BY created_at DESC, id DESC
        LIMIT ?`,
   );
   return stmt.all(safeLimit) as NoteRow[];
+}
+
+/** Look up a single note by id — used by the moment-repo derivation. */
+export function getNoteById(id: number): NoteRow | null {
+  const row = db
+    .prepare("SELECT id, content, created_at, repo FROM notes WHERE id = ?")
+    .get(id) as NoteRow | undefined;
+  return row ?? null;
 }
 
 /**

@@ -12,7 +12,12 @@ import { saveNoteAction, type SaveNoteResult } from "./actions";
 
 const initialState: SaveNoteResult | null = null;
 
-export function NoteForm() {
+type Props = {
+  /** "owner/name" of each watched repo, for the project select. Empty if none. */
+  repos: string[];
+};
+
+export function NoteForm({ repos }: Props) {
   const [state, formAction] = useFormState(saveNoteAction, initialState);
   const formRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -47,15 +52,47 @@ export function NoteForm() {
         }}
       />
 
-      <div className="flex items-center gap-3">
-        <SubmitButton />
-        {state?.ok === false && (
-          <span className="text-sm text-destructive">{state.error}</span>
-        )}
-        {state?.ok === true && (
-          <span className="text-sm text-wyco-teal">Saved.</span>
-        )}
+      <div className="flex items-center gap-3 flex-wrap">
+        <label
+          htmlFor="repo"
+          className="text-xs font-medium text-muted-foreground"
+        >
+          Link to project:
+        </label>
+        <select
+          id="repo"
+          name="repo"
+          defaultValue=""
+          className="rounded-md border border-input bg-card px-2 py-1.5 text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="">General (unlinked)</option>
+          {repos.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
+
+        <div className="flex items-center gap-3 ml-auto">
+          <SubmitButton />
+          {state?.ok === false && (
+            <span className="text-sm text-destructive">{state.error}</span>
+          )}
+          {state?.ok === true && (
+            <span className="text-sm text-wyco-teal">Saved.</span>
+          )}
+        </div>
       </div>
+
+      {repos.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          No watched repos yet —{" "}
+          <a href="/settings" className="text-wyco-teal hover:underline">
+            add some in Settings
+          </a>{" "}
+          and they&apos;ll appear here as link options.
+        </p>
+      )}
     </form>
   );
 }

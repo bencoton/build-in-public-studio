@@ -1,5 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { getRecentNotes } from "@/lib/notes";
+import { getWatchedRepos } from "@/lib/settings";
 import { relativeTime } from "@/lib/format";
 
 import { NoteForm } from "./note-form";
@@ -11,19 +13,20 @@ import { DeleteNoteButton } from "./delete-note-button";
 
 export default function NotesPage() {
   const notes = getRecentNotes(50);
+  const watchedRepos = getWatchedRepos();
 
   return (
     <div className="max-w-3xl mx-auto space-y-10">
       <div className="space-y-2">
         <h2 className="text-3xl font-semibold tracking-tight">Notes</h2>
         <p className="text-base text-muted-foreground max-w-2xl">
-          Quick capture for the things worth writing about later — the "why"
-          behind your work that a git log will never see. Used as input for the
-          weekly draft generator.
+          Quick capture for the things worth writing about later — the &quot;why&quot;
+          behind your work that a git log will never see. Link each note to a
+          project so it shows up in that project&apos;s draft generation.
         </p>
       </div>
 
-      <NoteForm />
+      <NoteForm repos={watchedRepos} />
 
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
@@ -43,8 +46,13 @@ export default function NotesPage() {
                 <Card>
                   <CardContent className="py-4 space-y-2">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs font-mono text-muted-foreground">
-                        {relativeTime(note.created_at)}
+                      <div className="flex items-center gap-2 text-xs font-mono">
+                        <Badge variant={note.repo ? "outline" : "secondary"}>
+                          {note.repo ?? "General"}
+                        </Badge>
+                        <span className="text-muted-foreground">
+                          {relativeTime(note.created_at)}
+                        </span>
                       </div>
                       <DeleteNoteButton noteId={note.id} />
                     </div>
