@@ -61,6 +61,15 @@ Ben. Beginner-leaning developer. Backend / scripting experience; mobile is newer
 - **Cross-project rule:** Before reaching for a native-binding npm package, check whether the equivalent Node built-in (`node:sqlite`, `node:crypto`, `node:fs/promises`, `node:test`, etc.) is sufficient. The WyCo Tech-Stack doc's "Prefer fewer dependencies" principle applies harder to native ones — they have an extra failure mode (the prebuild lottery) regular pure-JS packages don't.
 - **Detection signature:** Log contains `prebuild-install warn install No prebuilt binaries found (target=...)` AND `find VS could not use PowerShell to find Visual Studio 2017 or newer`.
 
+### BIPS-L4 — `node:sqlite` returns null-prototype rows; spread them before crossing Server → Client component boundaries
+
+- **Symptom:** `Error: Only plain objects, and a few built-ins, can be passed to Client Components from Server Components. Classes or null prototypes are not supported.` Fired when a Server Component renders a Client Component and passes DB-derived data as a prop.
+- **Root cause:** `node:sqlite`'s `Statement.all()` and `.get()` return rows constructed via `Object.create(null)` — they have **no prototype**. Next.js's RSC serializer rejects null-prototype objects at the Server → Client boundary even though they JSON-stringify fine.
+- **Fix recipe:** Spread DB rows into a fresh object literal before passing them as a prop. `{...row}` produces an object with `Object.prototype`, which serializes cleanly. Spread every level — if you have a row containing an array of rows, spread the outer object AND map-spread every element of the inner array. Tip: do this in your data-access helper (e.g. `getLatestGeneration()`), not in the page component, so every consumer benefits.
+- **When you don't need this:** when DB data is rendered directly in the Server Component's JSX (no Client Component prop crossing). Notes list, commits list, etc. work fine as-is — they're only re-shaped for the dashboard where `MomentCard` is a client component.
+- **Cross-project rule:** Anywhere a Next.js Server Component reads from `node:sqlite` and hands the result to a Client Component (`"use client"` file imported and rendered from a server component), shape the data in the data-access layer with object spreads. Don't pass raw rows.
+- **Detection signature:** Runtime error message contains "Only plain objects ... can be passed to Client Components" with a stack trace through `app-page.runtime.dev.js`. The offending prop is typically a DB-shaped object or an array of them.
+
 ### BIPS-L3 — `node:sqlite` has no `.transaction()` helper; use BEGIN/COMMIT/ROLLBACK manually
 
 - **Symptom:** Runtime error `db.transaction is not a function` when calling `db.transaction(() => { ... })`. The code looks correct because the same pattern works in `better-sqlite3`.

@@ -5,12 +5,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Sparkles, Github } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
-// Stage 1 placeholder dashboard. In Stage 6 this will render real drafts
-// grouped by "moment" with X / Indie Hackers tabs.
+import { getLatestGeneration } from "@/lib/moments";
+import { relativeTime } from "@/lib/format";
+
+import { GenerateNowButton } from "@/components/dashboard/generate-now-button";
+import { MomentCard } from "@/components/dashboard/moment-card";
+
+// The real dashboard. Server-renders the latest generation's moments;
+// each moment card is a client component that owns the edit / regenerate /
+// approve / reject lifecycle for its two variants.
+
 export default function DashboardPage() {
+  const moments = getLatestGeneration();
+  const latestAt = moments[0]?.created_at;
+
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="space-y-2">
@@ -18,39 +28,54 @@ export default function DashboardPage() {
           This week&apos;s drafts
         </h2>
         <p className="text-base text-muted-foreground max-w-2xl">
-          Story-worthy moments from your GitHub activity and notes, drafted for
-          X and Indie Hackers. Every Monday at 9am.
+          Story-worthy moments from your GitHub activity and notes. Two variants
+          per moment — X thread and Indie Hackers long-form. Edit, regenerate,
+          approve, reject.
         </p>
       </div>
 
-      <Card className="border-wyco-teal/20">
+      <Card>
         <CardHeader>
           <CardTitle className="text-base font-medium flex items-center gap-2">
             <Sparkles className="size-4 text-wyco-teal" />
-            No drafts yet
+            Generate
           </CardTitle>
-          <CardDescription className="pt-1">
-            Hook up your API keys in Settings, then sync your GitHub repos.
-            Drafts will appear here every Monday at 9am, or you can generate
-            them on demand.
+          <CardDescription>
+            {moments.length === 0
+              ? "No drafts yet — click below to generate from this week's commits + notes."
+              : `Latest generation: ${latestAt ? relativeTime(latestAt) : "never"}. Re-generate to replace.`}
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex gap-2">
-          <Button disabled>
-            <Sparkles className="size-4" />
-            Generate now
-          </Button>
-          <Button variant="outline" disabled>
-            <Github className="size-4" />
-            Sync GitHub
-          </Button>
+        <CardContent>
+          <GenerateNowButton />
         </CardContent>
       </Card>
 
-      <p className="text-xs text-muted-foreground font-mono">
-        Stage 1 of 10 — UI scaffold only. Buttons activate as later stages wire
-        them up.
-      </p>
+      {moments.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-muted-foreground">
+            Nothing drafted yet. Click &quot;Generate this week&apos;s
+            drafts&quot; above. You&apos;ll need at least one commit from a
+            watched repo or one note from the last 7 days.
+          </CardContent>
+        </Card>
+      ) : (
+        <section className="space-y-4">
+          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+            {moments.length} moment{moments.length === 1 ? "" : "s"} —{" "}
+            {moments.filter((m) =>
+              m.drafts.some((d) => d.status === "approved"),
+            ).length}{" "}
+            with an approved variant
+          </h3>
+
+          <div className="space-y-4">
+            {moments.map((moment) => (
+              <MomentCard key={moment.id} moment={moment} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

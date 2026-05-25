@@ -106,6 +106,15 @@ export function getMomentsByGeneration(generationId: string): MomentWithDrafts[]
         // Malformed source_ref — fall back to empty.
       }
     }
-    return { ...m, source_refs: sourceRefs, drafts };
+    // node:sqlite returns null-prototype objects from .all() / .get(). Spreading
+    // each one into a fresh {} gives it a plain prototype, which is required
+    // for the Server → Client component prop boundary (see BIPS-L4 in
+    // CLAUDE.md). The outer `{...m, ...}` covers the moment itself; mapping
+    // over drafts handles each row in the array.
+    return {
+      ...m,
+      source_refs: sourceRefs,
+      drafts: drafts.map((d) => ({ ...d })),
+    };
   });
 }
