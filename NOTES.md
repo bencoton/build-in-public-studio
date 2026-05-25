@@ -4,6 +4,29 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-05-25 — Stage 9 abandoned; pivot to Supabase + Vercel; 9b.1 shipped
+
+A long, important session. Three phases:
+
+**Phase A — Stage 9 attempt and failure.** Tried to ship the original spec's Monday-9am scheduler using node-cron inside Next.js's `src/instrumentation.ts` hook. Hit five sequential webpack-bundling bug classes:
+
+1. **`experimental.instrumentationHook: true`** flag turned out to be required despite Next.js 14.2 release notes claiming otherwise.
+2. **`node-notifier`** pulled in `is-wsl` → `is-docker` → `fs` and `growly` → `net`. Webpack couldn't resolve the Node built-ins via the deep transitive chain. `serverComponentsExternalPackages` helped for one chain but the next transitive dep failed identically. Decided to drop node-notifier entirely (Option B from the three-way decision); the dashboard's "Last run" header IS the user-facing notification for a weekly tool.
+3. **`node-cron`** itself had the same issue via its worker-script chain (`background-scheduled-task/index.js` → `path`). Replaced with a setTimeout + cron-parser scheduler (cron-parser was already a dep for the header).
+4. **`node:crypto`** URI scheme rejected by webpack's instrumentation bundle pass — `UnhandledSchemeError`. The same pass apparently handled `node:sqlite`, `node:fs`, `node:path` in route bundles but not in the instrumentation chain.
+5. **Bare `crypto`** then refused to resolve either. At that point we knew the instrumentation bundle context was fundamentally broken for our use case.
+
+Captured as **BIPS-L5** in `CLAUDE.md` with the full taxonomy: legacy-Node npm packages, transitive Node built-in deps, `serverComponentsExternalPackages` doesn't reliably help, and the `node:` URI scheme is unreliable across bundling passes.
+
+**Phase B — architectural rethink.** Stepped back. Three options on the table: drop in-process scheduling (10 min), migrate to Supabase + Vercel (4–6 hours), or hide the scheduler from webpack with a dynamic-require trick (5 min hack, technical debt). Ben (with Supabase + Vercel experience) chose the migration — the right call, because it permanently removes this class of fight, gives us a live URL for credibility, and brings the project onto the WyCo standard stack documented in `docs/Tech-Stack.md`. Phase 1.5b's scheduled-posts feature also becomes trivial on the new stack (postgres `due_at` column + Vercel Cron hourly check).
+
+**Phase C — Stage 9b.1 setup.** Supabase project created in London region for UK data residency. CLI installed globally. `supabase init` + `supabase link` succeeded. Initial schema migration written by hand (file: `supabase/migrations/20260525000000_initial_schema.sql`, mirrors the retired `db.ts` schema with Postgres idioms — `bigserial`, `timestamptz`, `jsonb`, RLS enabled per WyCo Tech-Stack rule). `supabase db push` applied cleanly; all six tables visible in the dashboard's Table Editor. Types generated to `src/types/database.ts` via the `cmd /c` wrapper from `docs/Ways-of-Working.md` Lesson L2 (the standard PowerShell-mangles-UTF-8 fix). `.env.local` populated with all three Supabase keys.
+
+The app still runs on `node:sqlite` for now — Stage 9b.2 ports the DB access layer. The pivot's foundation is in place.
+
+**Files deleted:** `src/instrumentation.ts`, `src/lib/scheduler.ts`, `src/lib/notifications.ts` (the failed Stage 9 chain).
+**Files added:** `supabase/config.toml`, `supabase/migrations/20260525000000_initial_schema.sql`, `src/types/database.ts`.
+
 ## 2026-05-25 — Session end: Phase 1.5 scoped, pause for real use
 
 Ben surfaced two new features after using the tool end-to-end:
