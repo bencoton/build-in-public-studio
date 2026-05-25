@@ -4,6 +4,14 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-05-25 — Stage 2 shipped
+
+- SQLite layer set up with **`node:sqlite`** (Node's built-in SQLite, stable in Node 22.5+ / fully stable in Node 24) instead of `better-sqlite3`. Decision driven by a real install failure: better-sqlite3 has no prebuilt binary for Node 24.14, and Ben doesn't have Visual Studio Build Tools to compile from source. Switching to a built-in removed a dependency rather than adding one — closer to the WyCo "prefer fewer deps" principle.
+- Lesson captured as BIPS-L2 in `CLAUDE.md`: native-binding npm packages lag behind new Node versions; check Node built-ins first.
+- Full schema for the whole app created upfront in `src/lib/db.ts` (notes, watched_repos, commits, moments, drafts, settings) so later stages don't need migrations. WAL mode + foreign keys enabled.
+- `/notes` page: server-component renders recent notes via `getRecentNotes()`, client-component form uses Next.js `useFormState` + `useFormStatus` for inline save/error UI. Ctrl/Cmd+Enter submits. Markdown stored verbatim (no rendering dep yet — deferred to Stage 10 polish).
+- `data/bips.sqlite` is `.gitignore`'d. The file appears on first run and persists across dev-server restarts. Ben verified the round trip end-to-end.
+
 ## 2026-05-25 — Stage 1 shipped
 
 - WyCo retrofit applied: Space Grotesk / Inter / JetBrains Mono fonts via next/font/google, slate-900 dark background, teal-500 primary, "by WyCo Digital" badge in the sidebar.

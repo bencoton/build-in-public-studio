@@ -26,7 +26,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 ## Current phase
 
-**Phase 1 — Local MVP.** Stage 1 complete (scaffold + docs + WyCo brand + first commit pushed). Starting Stage 2 next: SQLite schema and the `/notes` page.
+**Phase 1 — Local MVP.** Stages 1–2 complete. Storage layer in place (node:sqlite, no native binding), /notes page can save and list. Stage 3 next: Settings page + walk-throughs for the Anthropic and GitHub keys.
 
 ---
 
@@ -34,6 +34,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 <!-- Reverse-chronological log. Append new bullets at the top with each user-visible change. Each bullet: YYYY-MM-DD — what shipped. -->
 
+- **2026-05-25** — Stage 2 shipped: SQLite via Node's built-in `node:sqlite` module (no native bindings, no Visual Studio Build Tools dependency). Notes page saves and lists with relative timestamps. Full schema for the whole app created on first boot (notes, watched_repos, commits, moments, drafts, settings).
 - **2026-05-25** — Stage 1 shipped: project docs in place, WyCo-branded dashboard renders on localhost:3000, private GitHub repo created at bencoton/build-in-public-studio, first commit pushed.
 
 ---
@@ -42,12 +43,12 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 **This week:**
 
-- Stage 2 — SQLite schema (drafts, notes, repos, settings, ratings) and the /notes page (textarea + recent-notes list, markdown supported).
-- Stage 3 — Settings page, with step-by-step walk-throughs for getting the Anthropic key and the GitHub fine-grained token.
+- Stage 3 — Settings page, with step-by-step walk-throughs for getting the Anthropic key and the GitHub fine-grained token. Both keys validated by smoke-test calls before the stage closes.
+- Stage 4 — GitHub sync via Octokit. Watched repos selected in Settings; the last 7 days of commits pulled and rendered raw on a debug page.
 
 **Next week:**
 
-- Stage 4 — GitHub sync via Octokit. Watched repos in Settings; commits pulled and displayed raw on a debug page.
+- Stage 5 — Claude drafting for one moment, rendering structured JSON output. The first end-to-end "GitHub commits + notes → draft post" round trip.
 
 ---
 
