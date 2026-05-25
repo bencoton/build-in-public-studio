@@ -102,3 +102,28 @@ db.exec(`
 `);
 
 export { db };
+
+/**
+ * Run `fn` inside a transaction. Wraps with explicit BEGIN / COMMIT / ROLLBACK
+ * because node:sqlite (unlike better-sqlite3) does not ship a `.transaction()`
+ * helper.
+ *
+ * If `fn` throws, the changes are rolled back and the original error is
+ * re-thrown. If the ROLLBACK itself fails (rare, e.g. the connection died),
+ * we swallow it — the underlying error matters more than the rollback noise.
+ */
+export function transaction<T>(fn: () => T): T {
+  db.exec("BEGIN");
+  try {
+    const result = fn();
+    db.exec("COMMIT");
+    return result;
+  } catch (err) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      // Swallow rollback failures so the original error surfaces unobscured.
+    }
+    throw err;
+  }
+}

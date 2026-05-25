@@ -46,3 +46,14 @@ export function getRecentNotes(limit = 50): NoteRow[] {
   );
   return stmt.all(safeLimit) as NoteRow[];
 }
+
+/**
+ * Delete a note by id. Returns true if a row was deleted, false if no row
+ * matched (silent no-op rather than throw — callers can decide what to do).
+ */
+export function deleteNote(id: number): boolean {
+  const result = db
+    .prepare("DELETE FROM notes WHERE id = ?")
+    .run(id) as { changes: number };
+  return result.changes > 0;
+}

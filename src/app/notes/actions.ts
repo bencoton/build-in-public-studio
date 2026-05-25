@@ -6,7 +6,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { addNote } from "@/lib/notes";
+import { addNote, deleteNote } from "@/lib/notes";
 
 export type SaveNoteResult =
   | { ok: true }
@@ -42,6 +42,31 @@ export async function saveNoteAction(
   }
 
   // Tell Next.js to refresh the /notes server-rendered list so the new note shows up.
+  revalidatePath("/notes");
+  return { ok: true };
+}
+
+export type DeleteNoteResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Delete a note by id. Confirmation is the client's responsibility — we trust
+ * the caller has already asked the user "are you sure".
+ */
+export async function deleteNoteAction(id: number): Promise<DeleteNoteResult> {
+  if (!Number.isInteger(id) || id <= 0) {
+    return { ok: false, error: "Invalid note id." };
+  }
+  try {
+    const deleted = deleteNote(id);
+    if (!deleted) {
+      return { ok: false, error: "Note not found (may already be deleted)." };
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    return { ok: false, error: message };
+  }
   revalidatePath("/notes");
   return { ok: true };
 }

@@ -60,3 +60,27 @@ Ben. Beginner-leaning developer. Backend / scripting experience; mobile is newer
 - **Fix recipe:** **First** — check whether a Node built-in covers the use case. `node:sqlite` covers anything `better-sqlite3` does for a basic local app. Built-ins always work; no install lag. Drop the npm dep and use the `node:*` import. **Second** — if no built-in fits, downgrade Node to the most recent LTS the package supports (commonly via `nvm-windows` / `fnm`). **Last resort** — install Visual Studio Build Tools and let `node-gyp` rebuild.
 - **Cross-project rule:** Before reaching for a native-binding npm package, check whether the equivalent Node built-in (`node:sqlite`, `node:crypto`, `node:fs/promises`, `node:test`, etc.) is sufficient. The WyCo Tech-Stack doc's "Prefer fewer dependencies" principle applies harder to native ones — they have an extra failure mode (the prebuild lottery) regular pure-JS packages don't.
 - **Detection signature:** Log contains `prebuild-install warn install No prebuilt binaries found (target=...)` AND `find VS could not use PowerShell to find Visual Studio 2017 or newer`.
+
+### BIPS-L3 — `node:sqlite` has no `.transaction()` helper; use BEGIN/COMMIT/ROLLBACK manually
+
+- **Symptom:** Runtime error `db.transaction is not a function` when calling `db.transaction(() => { ... })`. The code looks correct because the same pattern works in `better-sqlite3`.
+- **Root cause:** `node:sqlite`'s `DatabaseSync` class has a smaller API surface than `better-sqlite3`. There is no `.transaction()` helper method. The mistake is muscle-memoried from better-sqlite3 — easy to make if you've used that library a lot.
+- **Fix recipe:** Wrap with explicit transaction statements. A small helper in `src/lib/db.ts` keeps callers clean:
+
+  \`\`\`ts
+  export function transaction<T>(fn: () => T): T {
+    db.exec("BEGIN");
+    try {
+      const result = fn();
+      db.exec("COMMIT");
+      return result;
+    } catch (err) {
+      try { db.exec("ROLLBACK"); } catch {}
+      throw err;
+    }
+  }
+  \`\`\`
+
+  Callers use \`transaction(() => { ... })\` exactly like the better-sqlite3 idiom.
+- **Cross-project rule:** Other better-sqlite3-only APIs that don't exist on `node:sqlite`: \`.pragma()\` (use \`db.exec("PRAGMA ...")\`), typed generics on \`.prepare<P, R>()\` (cast the result with \`as R\` instead), \`.iterate()\` (no streaming iterator; use \`.all()\` or call \`.get()\` in a loop), \`.backup()\` (no built-in backup helper). Before reaching for a better-sqlite3 idiom in this project, check the [`node:sqlite` docs](https://nodejs.org/api/sqlite.html) first.
+- **Detection signature:** Runtime error referencing a method on `db` that exists in better-sqlite3 but not in `node:sqlite`. Common variants: \`.transaction\`, \`.pragma\`, \`.iterate\`, \`.backup\`.

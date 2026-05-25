@@ -3,6 +3,7 @@ import { getRecentNotes } from "@/lib/notes";
 import { relativeTime } from "@/lib/format";
 
 import { NoteForm } from "./note-form";
+import { DeleteNoteButton } from "./delete-note-button";
 
 // The notes page is a Server Component (no "use client" at the top). That means
 // the database read happens server-side during render — no API route needed.
@@ -41,8 +42,11 @@ export default function NotesPage() {
               <li key={note.id}>
                 <Card>
                   <CardContent className="py-4 space-y-2">
-                    <div className="text-xs font-mono text-muted-foreground">
-                      {relativeTime(note.created_at)}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs font-mono text-muted-foreground">
+                        {relativeTime(note.created_at)}
+                      </div>
+                      <DeleteNoteButton noteId={note.id} />
                     </div>
                     <div className="text-sm whitespace-pre-wrap leading-relaxed">
                       {note.content}
