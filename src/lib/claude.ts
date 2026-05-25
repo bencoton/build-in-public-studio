@@ -3,11 +3,15 @@ import { randomUUID } from "node:crypto";
 
 import { getAnthropicKey } from "./env-keys";
 import { getBannedWords, getStyleNotes } from "./settings";
-import { getRecentNotes, getNoteById } from "./notes";
-import { getRecentCommits } from "./commits";
+import { getRecentNotes, getNoteById, type NoteRow } from "./notes";
+import {
+  getRecentCommits,
+  getReposForShaPrefix,
+  type CommitRow,
+} from "./commits";
 import { insertMomentWithDrafts } from "./moments";
 import { getStarredExamples, type HistoryDraft } from "./history";
-import { db } from "./db";
+import { parseTimestamp } from "./format";
 import { DRAFT_SYSTEM_PROMPT } from "@/prompts/draft-system";
 
 /*
@@ -109,10 +113,12 @@ export async function generateDrafts(): Promise<GenerationResult> {
   // Pull commits and notes from the last 7 days. The commits table already
   // contains only the synced ones, but we filter again here so a stale cache
   // doesn't leak older commits in if the user hasn't synced recently.
-  const allCommits = getRecentCommits(500);
+  // Note: voiceExamples and insertMomentWithDrafts are still sync — they're
+  // ported in Stage 9b.2 round 3.
+  const allCommits = await getRecentCommits(500);
   const commits = allCommits.filter((c) => new Date(c.committed_at) >= cutoff);
 
-  const allNotes = getRecentNotes(200);
+  const allNotes = await getRecentNotes(200);
   const notes = allNotes.filter((n) => parseTimestamp(n.created_at) >= cutoff);
 
   if (commits.length === 0 && notes.length === 0) {
@@ -121,11 +127,13 @@ export async function generateDrafts(): Promise<GenerationResult> {
     );
   }
 
-  const userBannedWords = getBannedWords();
-  const styleNotes = getStyleNotes();
-  // Voice-learning loop: pull up to 10 random starred drafts as examples.
-  // Posted-and-starred entries are preferred (see getStarredExamples).
-  const voiceExamples = getStarredExamples(10);
+  const [userBannedWords, styleNotes, voiceExamples] = await Promise.all([
+    getBannedWords(),
+    getStyleNotes(),
+    // Voice-learning loop: pull up to 10 random starred drafts as examples.
+    // Posted-and-starred entries are preferred (see getStarredExamples).
+    getStarredExamples(10),
+  ]);
 
   const userMessage = buildUserMessage({
     commits,
@@ -178,8 +186,8 @@ export async function generateDrafts(): Promise<GenerationResult> {
   // Persist. Each generation gets a UUID so we can group its moments later.
   const generationId = randomUUID();
   for (const moment of parsed) {
-    const repo = deriveMomentRepo(moment.source_type, moment.source_refs);
-    insertMomentWithDrafts({
+    const repo = await deriveMomentRepo(moment.source_type, moment.source_refs);
+    await insertMomentWithDrafts({
       summary: moment.summary,
       sourceType: moment.source_type,
       sourceRefs: moment.source_refs,
@@ -203,8 +211,8 @@ export async function generateDrafts(): Promise<GenerationResult> {
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function buildUserMessage(args: {
-  commits: ReturnType<typeof getRecentCommits>;
-  notes: ReturnType<typeof getRecentNotes>;
+  commits: CommitRow[];
+  notes: NoteRow[];
   userBannedWords: string[];
   styleNotes: string;
   voiceExamples: HistoryDraft[];
@@ -296,18 +304,18 @@ function firstLine(s: string): string {
  *
  * We try both lookups per ref. Cheap — only runs once per moment at insert.
  */
-function deriveMomentRepo(
+async function deriveMomentRepo(
   _sourceType: string,
   sourceRefs: string[],
-): string | null {
+): Promise<string | null> {
   const repos = new Set<string>();
   for (const ref of sourceRefs) {
     const trimmed = ref.trim();
     if (!trimmed) continue;
 
-    // Try as a note id first (numeric).
+    // Try as a note id first (numeric). notes is on Supabase now (Round 1).
     if (/^\d+$/.test(trimmed)) {
-      const note = getNoteById(Number(trimmed));
+      const note = await getNoteById(Number(trimmed));
       if (note?.repo) repos.add(note.repo);
       continue;
     }
@@ -316,10 +324,8 @@ function deriveMomentRepo(
     // short SHAs (the format we feed Claude) and full SHAs (if Claude echoed
     // a longer form).
     if (/^[0-9a-f]{4,40}$/i.test(trimmed)) {
-      const rows = db
-        .prepare("SELECT DISTINCT repo FROM commits WHERE sha LIKE ?")
-        .all(`${trimmed.toLowerCase()}%`) as Array<{ repo: string }>;
-      for (const r of rows) repos.add(r.repo);
+      const matchedRepos = await getReposForShaPrefix(trimmed);
+      for (const r of matchedRepos) repos.add(r);
     }
   }
 
@@ -328,10 +334,6 @@ function deriveMomentRepo(
   }
   // Zero or multiple repos — leave null (general / multi-repo / unknown).
   return null;
-}
-
-function parseTimestamp(s: string): Date {
-  return new Date(s.replace(" ", "T") + (s.endsWith("Z") ? "" : "Z"));
 }
 
 /**

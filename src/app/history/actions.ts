@@ -21,7 +21,7 @@ export async function setRatingAction(
     return { ok: false, error: `Invalid rating: ${rating}` };
   }
   try {
-    setDraftRating(draftId, rating);
+    await setDraftRating(draftId, rating);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return { ok: false, error: message };

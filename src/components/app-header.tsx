@@ -1,6 +1,6 @@
 // Header shown above the main content area on every page.
-// Server-rendered. Computes "Last run / Next run" from the settings table +
-// the user's cron string. Marked async because it reads from the DB.
+// Async server component — reads the last_run_at and schedule_cron from
+// Supabase. The cron-parser computation is local and synchronous.
 
 import { parseExpression } from "cron-parser";
 
@@ -9,13 +9,17 @@ import { relativeTime, relativeFuture } from "@/lib/format";
 
 const SCHEDULER_TIMEZONE = "Europe/London";
 
-export function AppHeader() {
-  const lastRunAt = getLastRunAt();
-  const cronString = getScheduleCron();
+export async function AppHeader() {
+  // Two Supabase reads — parallel, cheap.
+  const [lastRunAt, cronString] = await Promise.all([
+    getLastRunAt(),
+    getScheduleCron(),
+  ]);
   const nextRunAt = computeNextRun(cronString);
 
   // "Missed run" — last run was over 8 days ago AND scheduler is supposed to
-  // be weekly. Common cause: dev server wasn't running last Monday morning.
+  // be weekly. Common cause: nothing has run in over a week (e.g. before
+  // Vercel Cron is wired in Stage 9b.4, or if the deployment was paused).
   const lastRunDate = lastRunAt ? new Date(lastRunAt) : null;
   const isMissed =
     lastRunDate !== null &&
@@ -28,7 +32,7 @@ export function AppHeader() {
       </h1>
       <div
         className="text-xs font-mono"
-        title={`Scheduler timezone: ${SCHEDULER_TIMEZONE}. Cron only fires while the dev server is running.`}
+        title={`Scheduler timezone: ${SCHEDULER_TIMEZONE}. The Vercel Cron job ships in Stage 9b.4 — until then, runs are triggered manually from the dashboard.`}
       >
         <span className={isMissed ? "text-amber-500" : "text-muted-foreground"}>
           Last run:{" "}
@@ -36,7 +40,10 @@ export function AppHeader() {
             {lastRunAt ? relativeTime(lastRunAt) : "never"}
           </span>
           {isMissed && (
-            <span className="text-amber-500" title="Last scheduled run was over 8 days ago — the dev server may have been off. Click Generate on the dashboard to catch up.">
+            <span
+              className="text-amber-500"
+              title="Last scheduled run was over 8 days ago. Click Generate on the dashboard to catch up."
+            >
               {" "}
               ⚠
             </span>

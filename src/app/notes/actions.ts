@@ -37,7 +37,7 @@ export async function saveNoteAction(
   }
 
   try {
-    addNote(content, repo);
+    await addNote(content, repo);
   } catch (err) {
     // Real error path — surface to the UI rather than fail silently.
     // (See docs/Ways-of-Working.md Part 8: never swallow errors.)
@@ -63,7 +63,7 @@ export async function deleteNoteAction(id: number): Promise<DeleteNoteResult> {
     return { ok: false, error: "Invalid note id." };
   }
   try {
-    const deleted = deleteNote(id);
+    const deleted = await deleteNote(id);
     if (!deleted) {
       return { ok: false, error: "Note not found (may already be deleted)." };
     }

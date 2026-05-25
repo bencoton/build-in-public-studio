@@ -28,12 +28,12 @@ const VALID_STATUS: DraftStatus[] = ["draft", "approved", "posted", "rejected"];
 const VALID_VARIANT = ["x_thread", "ih_long"] as const;
 const VALID_RATING = ["star", "flop", "neutral", "unrated"] as const;
 
-export default function HistoryPage({
+export default async function HistoryPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
-  const projects = getProjectsInHistory();
+  const projects = await getProjectsInHistory();
 
   // Repo filter accepts "all", "general", or any value that appears in `projects`.
   // Anything else (stale URL after a repo got removed, manual hand-typed values)
@@ -49,8 +49,10 @@ export default function HistoryPage({
     repo: repoFilter,
   };
 
-  const drafts = getAllDrafts(filters);
-  const counts = getDraftCountsByStatus();
+  const [drafts, counts] = await Promise.all([
+    getAllDrafts(filters),
+    getDraftCountsByStatus(),
+  ]);
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   const posted = counts.posted ?? 0;
 

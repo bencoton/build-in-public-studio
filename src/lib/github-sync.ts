@@ -45,7 +45,7 @@ export async function syncWatchedRepos(): Promise<SyncSummary> {
     throw new Error("GITHUB_TOKEN is not set. Configure it in Settings first.");
   }
 
-  const watched = getWatchedRepos();
+  const watched = await getWatchedRepos();
   const startedAt = new Date().toISOString();
 
   if (watched.length === 0) {
@@ -90,7 +90,13 @@ export async function syncWatchedRepos(): Promise<SyncSummary> {
         const committedAt =
           c.commit.committer?.date ?? c.commit.author?.date ?? startedAt;
         const message = c.commit.message ?? "";
-        const wasNew = upsertCommit(fullName, c.sha, message, committedAt, null);
+        const wasNew = await upsertCommit(
+          fullName,
+          c.sha,
+          message,
+          committedAt,
+          null,
+        );
         if (wasNew) inserted++;
       }
 

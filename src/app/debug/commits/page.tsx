@@ -21,11 +21,13 @@ import { SyncButton } from "./sync-button";
 // "Sync GitHub" button (wired in Stage 6). The whole page is server-rendered;
 // the only client island is the Sync button.
 
-export default function DebugCommitsPage() {
-  const watched = getWatchedRepos();
-  const lastSyncedAt = getLastSyncedAt();
-  const countsByRepo = getCommitCountsByRepo();
-  const commits = getRecentCommits(100);
+export default async function DebugCommitsPage() {
+  const [watched, lastSyncedAt, countsByRepo, commits] = await Promise.all([
+    getWatchedRepos(),
+    getLastSyncedAt(),
+    getCommitCountsByRepo(),
+    getRecentCommits(100),
+  ]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-10">

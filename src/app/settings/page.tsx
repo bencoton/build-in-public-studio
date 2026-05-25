@@ -10,15 +10,18 @@ import { ApiKeysSection } from "./api-keys-section";
 import { WatchedReposSection } from "./watched-repos-section";
 import { PreferencesForm } from "./preferences-form";
 
-// Server component — reads env state and DB settings server-side, then hands
-// them to the three client components below as props.
+// Async server component — env state is sync (just reads process.env), but
+// the four DB reads are now async (Supabase). Promise.all runs them in
+// parallel so the page TTFB is one round-trip, not four sequential ones.
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
   const keys = readApiKeyState();
-  const watched = getWatchedRepos();
-  const scheduleCron = getScheduleCron();
-  const bannedWords = getBannedWords();
-  const styleNotes = getStyleNotes();
+  const [watched, scheduleCron, bannedWords, styleNotes] = await Promise.all([
+    getWatchedRepos(),
+    getScheduleCron(),
+    getBannedWords(),
+    getStyleNotes(),
+  ]);
 
   return (
     <div className="max-w-3xl mx-auto space-y-10">
@@ -27,7 +30,7 @@ export default function SettingsPage() {
         <p className="text-base text-muted-foreground max-w-2xl">
           API keys, watched repos, schedule, and tone. Keys live in{" "}
           <code className="font-mono">.env.local</code> (never the database).
-          Everything else is stored in the local SQLite file.
+          Everything else is stored in Supabase.
         </p>
       </div>
 

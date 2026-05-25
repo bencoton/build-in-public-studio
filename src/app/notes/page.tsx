@@ -11,9 +11,11 @@ import { DeleteNoteButton } from "./delete-note-button";
 // the database read happens server-side during render — no API route needed.
 // The form below is a Client Component for its interactivity.
 
-export default function NotesPage() {
-  const notes = getRecentNotes(50);
-  const watchedRepos = getWatchedRepos();
+export default async function NotesPage() {
+  const [notes, watchedRepos] = await Promise.all([
+    getRecentNotes(50),
+    getWatchedRepos(),
+  ]);
 
   return (
     <div className="max-w-3xl mx-auto space-y-10">

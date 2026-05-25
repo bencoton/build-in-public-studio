@@ -54,7 +54,7 @@ export async function saveWatchedReposAction(
       .filter((v): v is string => typeof v === "string")
       .map((s) => s.trim())
       .filter(Boolean);
-    setWatchedRepos(repos);
+    await setWatchedRepos(repos);
     revalidatePath("/settings");
     return {
       ok: true,
@@ -94,14 +94,14 @@ export async function savePreferencesAction(
       };
     }
 
-    setScheduleCron(cron);
-    setBannedWords(
+    await setScheduleCron(cron);
+    await setBannedWords(
       bannedWordsRaw
         .split("\n")
         .map((s) => s.trim())
         .filter(Boolean),
     );
-    setStyleNotes(styleNotes.trim());
+    await setStyleNotes(styleNotes.trim());
 
     revalidatePath("/settings");
     return { ok: true, message: "Preferences saved." };

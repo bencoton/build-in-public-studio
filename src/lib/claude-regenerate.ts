@@ -49,7 +49,7 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
     throw new Error("ANTHROPIC_API_KEY is not set. Configure it in Settings first.");
   }
 
-  const found = getDraftWithMoment(draftId);
+  const found = await getDraftWithMoment(draftId);
   if (!found) {
     throw new Error(`Draft ${draftId} not found.`);
   }
@@ -59,21 +59,19 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
     throw new Error(`Unknown variant: ${draft.variant}`);
   }
 
-  // Parse source refs out of the moment's JSON.
+  // source_ref is jsonb — already parsed by Supabase, not a TEXT-of-JSON
+  // string like in the SQLite era. So we just type-check the array shape.
   let sourceRefs: string[] = [];
-  if (moment.source_ref) {
-    try {
-      const parsed = JSON.parse(moment.source_ref);
-      if (Array.isArray(parsed)) {
-        sourceRefs = parsed.filter((s): s is string => typeof s === "string");
-      }
-    } catch {
-      // Ignore malformed refs — Claude can work from the summary alone.
-    }
+  if (Array.isArray(moment.source_ref)) {
+    sourceRefs = moment.source_ref.filter(
+      (s): s is string => typeof s === "string",
+    );
   }
 
-  const userBannedWords = getBannedWords();
-  const styleNotes = getStyleNotes();
+  const [userBannedWords, styleNotes] = await Promise.all([
+    getBannedWords(),
+    getStyleNotes(),
+  ]);
 
   const variantLabel =
     draft.variant === "x_thread"
@@ -148,7 +146,7 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
     throw new Error("Claude returned an empty redraft.");
   }
 
-  updateDraftContent(draftId, input.content);
+  await updateDraftContent(draftId, input.content);
 
   return {
     inputTokens: response.usage.input_tokens,

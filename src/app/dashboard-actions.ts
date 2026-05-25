@@ -33,7 +33,7 @@ export async function saveDraftEditAction(
   content: string,
 ): Promise<SimpleActionResult> {
   try {
-    updateDraftContent(draftId, content);
+    await updateDraftContent(draftId, content);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return { ok: false, error: message };
@@ -64,7 +64,7 @@ export async function setDraftStatusAction(
   status: DraftStatus,
 ): Promise<SimpleActionResult> {
   try {
-    updateDraftStatus(draftId, status);
+    await updateDraftStatus(draftId, status);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return { ok: false, error: message };
@@ -91,7 +91,7 @@ export async function markPostedAction(
     return { ok: false, error: "URL should start with http:// or https://." };
   }
   try {
-    markDraftAsPosted(draftId, trimmed);
+    await markDraftAsPosted(draftId, trimmed);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return { ok: false, error: message };
@@ -108,7 +108,7 @@ export async function generateAllDraftsAction(): Promise<GenerateActionResult> {
     // Record this as the "last run" so the header updates whether the
     // trigger was cron or a manual click — semantics: time of last
     // successful generation, regardless of source.
-    setLastRunAt(new Date().toISOString());
+    await setLastRunAt(new Date().toISOString());
     revalidatePath("/");
     return { ok: true, result };
   } catch (err) {

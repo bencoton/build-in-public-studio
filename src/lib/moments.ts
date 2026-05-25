@@ -1,13 +1,13 @@
-import { db, transaction } from "./db";
+import { supabase } from "./supabase";
 
 export type MomentRow = {
   id: number;
   summary: string;
   source_type: string; // 'commit' | 'note' | 'mixed' (constrained by Claude, not the DB)
-  source_ref: string | null; // JSON array of strings
+  source_ref: unknown; // jsonb — typically string[] | null; Claude guarantees the shape
   generation_id: string;
   created_at: string;
-  repo: string | null; // "owner/name" derived at insert time from source refs, or NULL
+  repo: string | null;
 };
 
 export type DraftRow = {
@@ -29,14 +29,14 @@ export type MomentWithDrafts = MomentRow & {
 };
 
 /**
- * Insert a moment along with its two draft variants. Returns the new moment_id.
- * Wrapped in a transaction so a partial failure doesn't leave a half-saved moment.
+ * Insert a moment along with its two draft variants. Uses the Postgres RPC
+ * function `insert_moment_with_drafts` (defined in migration 20260525180000)
+ * to wrap the multi-row insert in a real ACID transaction — what we used to
+ * get from db.transaction() under node:sqlite.
  *
- * @param args.repo  Derived primary repo for the moment, or null for general /
- *                   multi-repo / unknown. Persisted on the moments row so the
- *                   history page can filter by it.
+ * Returns the new moment's id.
  */
-export function insertMomentWithDrafts(args: {
+export async function insertMomentWithDrafts(args: {
   summary: string;
   sourceType: string;
   sourceRefs: string[];
@@ -44,84 +44,87 @@ export function insertMomentWithDrafts(args: {
   xThread: string;
   ihLong: string;
   repo: string | null;
-}): number {
-  return transaction(() => {
-    const momentResult = db
-      .prepare(
-        `INSERT INTO moments (summary, source_type, source_ref, generation_id, repo)
-           VALUES (?, ?, ?, ?, ?)`,
-      )
-      .run(
-        args.summary,
-        args.sourceType,
-        JSON.stringify(args.sourceRefs),
-        args.generationId,
-        args.repo,
-      ) as { lastInsertRowid: number | bigint };
-    const momentId = Number(momentResult.lastInsertRowid);
-
-    const insertDraft = db.prepare(
-      `INSERT INTO drafts (moment_id, variant, content) VALUES (?, ?, ?)`,
-    );
-    insertDraft.run(momentId, "x_thread", args.xThread);
-    insertDraft.run(momentId, "ih_long", args.ihLong);
-
-    return momentId;
+}): Promise<number> {
+  const { data, error } = await supabase.rpc("insert_moment_with_drafts", {
+    p_summary: args.summary,
+    p_source_type: args.sourceType,
+    p_source_refs: args.sourceRefs,
+    p_generation_id: args.generationId,
+    p_repo: args.repo,
+    p_x_thread: args.xThread,
+    p_ih_long: args.ihLong,
   });
+  if (error) throw new Error(`insertMomentWithDrafts: ${error.message}`);
+  if (data === null || data === undefined) {
+    throw new Error("insertMomentWithDrafts: RPC returned no id");
+  }
+  // bigint from Postgres may come through as number or string depending on
+  // the client version. Normalise via Number().
+  return Number(data);
 }
 
-/** Latest generation's moments + their drafts. */
-export function getLatestGeneration(): MomentWithDrafts[] {
-  const latest = db
-    .prepare(
-      "SELECT generation_id FROM moments ORDER BY created_at DESC, id DESC LIMIT 1",
-    )
-    .get() as { generation_id: string } | undefined;
+/** All moments in the most recent generation, with their drafts attached. */
+export async function getLatestGeneration(): Promise<MomentWithDrafts[]> {
+  // Step 1: find the most recent generation_id.
+  const { data: latest, error: e1 } = await supabase
+    .from("moments")
+    .select("generation_id")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (e1) throw new Error(`getLatestGeneration (find latest): ${e1.message}`);
   if (!latest) return [];
+
   return getMomentsByGeneration(latest.generation_id);
 }
 
-export function getMomentsByGeneration(generationId: string): MomentWithDrafts[] {
-  const moments = db
-    .prepare(
-      `SELECT id, summary, source_type, source_ref, generation_id, created_at, repo
-         FROM moments
-         WHERE generation_id = ?
-         ORDER BY id ASC`,
+/**
+ * Fetch all moments with a given generation_id, plus their drafts as nested
+ * objects (via PostgREST's FK-join select syntax). Each moment row comes back
+ * with a `drafts` array embedded.
+ */
+export async function getMomentsByGeneration(
+  generationId: string,
+): Promise<MomentWithDrafts[]> {
+  const { data, error } = await supabase
+    .from("moments")
+    .select(
+      `id, summary, source_type, source_ref, generation_id, created_at, repo,
+       drafts (
+         id, moment_id, variant, content, status, rating,
+         posted_url, posted_at, created_at, updated_at
+       )`,
     )
-    .all(generationId) as MomentRow[];
+    .eq("generation_id", generationId)
+    .order("id", { ascending: true });
 
-  if (moments.length === 0) return [];
+  if (error) throw new Error(`getMomentsByGeneration: ${error.message}`);
 
-  const draftsStmt = db.prepare(
-    `SELECT id, moment_id, variant, content, status, rating, posted_url, posted_at, created_at, updated_at
-       FROM drafts
-       WHERE moment_id = ?
-       ORDER BY variant ASC`,
-  );
-
-  return moments.map((m) => {
-    const drafts = draftsStmt.all(m.id) as DraftRow[];
+  return (data ?? []).map((m) => {
+    // source_ref is jsonb — Supabase parses it for us, so no JSON.parse needed
+    // (unlike under node:sqlite where it came back as a string).
     let sourceRefs: string[] = [];
-    if (m.source_ref) {
-      try {
-        const parsed = JSON.parse(m.source_ref);
-        if (Array.isArray(parsed)) {
-          sourceRefs = parsed.filter((s): s is string => typeof s === "string");
-        }
-      } catch {
-        // Malformed source_ref — fall back to empty.
-      }
+    if (Array.isArray(m.source_ref)) {
+      sourceRefs = m.source_ref.filter(
+        (s): s is string => typeof s === "string",
+      );
     }
-    // node:sqlite returns null-prototype objects from .all() / .get(). Spreading
-    // each one into a fresh {} gives it a plain prototype, which is required
-    // for the Server → Client component prop boundary (see BIPS-L4 in
-    // CLAUDE.md). The outer `{...m, ...}` covers the moment itself; mapping
-    // over drafts handles each row in the array.
+    // Sort drafts deterministically so the X / IH tabs always render in the
+    // same order. ih_long < x_thread alphabetically — matches the SQLite ORDER BY.
+    const sortedDrafts = (m.drafts ?? []).sort((a, b) =>
+      a.variant.localeCompare(b.variant),
+    );
     return {
-      ...m,
+      id: m.id,
+      summary: m.summary,
+      source_type: m.source_type,
+      source_ref: m.source_ref,
+      generation_id: m.generation_id,
+      created_at: m.created_at,
+      repo: m.repo,
       source_refs: sourceRefs,
-      drafts: drafts.map((d) => ({ ...d })),
+      drafts: sortedDrafts as DraftRow[],
     };
   });
 }

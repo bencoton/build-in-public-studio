@@ -1,10 +1,14 @@
-import { db } from "./db";
+import { supabase } from "./supabase";
 
 /**
  * Mark a draft as posted: save the URL, set the timestamp, flip status to
- * "posted". Single statement so it's atomic — no transaction needed.
+ * "posted". Single UPDATE statement so it's atomic at the row level — no
+ * transaction needed.
  */
-export function markDraftAsPosted(draftId: number, postedUrl: string): void {
+export async function markDraftAsPosted(
+  draftId: number,
+  postedUrl: string,
+): Promise<void> {
   const trimmed = postedUrl.trim();
   if (!trimmed) {
     throw new Error("Posted URL cannot be empty.");
@@ -12,12 +16,15 @@ export function markDraftAsPosted(draftId: number, postedUrl: string): void {
   if (trimmed.length > 2000) {
     throw new Error("Posted URL is too long.");
   }
-  db.prepare(
-    `UPDATE drafts
-       SET status = 'posted',
-           posted_url = ?,
-           posted_at = CURRENT_TIMESTAMP,
-           updated_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
-  ).run(trimmed, draftId);
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("drafts")
+    .update({
+      status: "posted",
+      posted_url: trimmed,
+      posted_at: now,
+      updated_at: now,
+    })
+    .eq("id", draftId);
+  if (error) throw new Error(`markDraftAsPosted(${draftId}): ${error.message}`);
 }

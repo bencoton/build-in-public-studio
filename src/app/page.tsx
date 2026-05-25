@@ -25,12 +25,12 @@ import {
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
-export default function DashboardPage({
+export default async function DashboardPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
-  const moments = getLatestGeneration();
+  const moments = await getLatestGeneration();
   const latestAt = moments[0]?.created_at;
 
   const rawProject =

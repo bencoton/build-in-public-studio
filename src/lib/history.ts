@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { supabase } from "./supabase";
 import type { DraftRow } from "./moments";
 import type { DraftStatus } from "./draft-mutations";
 
@@ -15,130 +15,179 @@ export type HistoryFilters = {
   status?: DraftStatus | "all";
   variant?: "x_thread" | "ih_long" | "all";
   rating?: DraftRating | "unrated" | "all";
-  /** "owner/name" of a watched repo, "general" for NULL-repo moments, or "all" / undefined for no filter. */
+  /** "owner/name", "general" for NULL-repo moments, or "all" / undefined for no filter. */
   repo?: string;
 };
 
+// ── Shared shape for nested-select rows returned from PostgREST ───────────
+// Supabase's FK-join select returns `moments` as a nested object on each draft
+// row. The TypeScript types from `src/types/database.ts` know about the join,
+// but to keep the mapping in one place we declare our own narrow type and
+// cast.
+type DraftWithMomentRow = DraftRow & {
+  moments: {
+    summary: string;
+    source_type: string;
+    created_at: string;
+    repo: string | null;
+  } | null;
+};
+
+function flatten(row: DraftWithMomentRow): HistoryDraft {
+  return {
+    id: row.id,
+    moment_id: row.moment_id,
+    variant: row.variant,
+    content: row.content,
+    status: row.status,
+    rating: row.rating,
+    posted_url: row.posted_url,
+    posted_at: row.posted_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    moment_summary: row.moments?.summary ?? "",
+    moment_source_type: row.moments?.source_type ?? "",
+    moment_created_at: row.moments?.created_at ?? "",
+    moment_repo: row.moments?.repo ?? null,
+  };
+}
+
 /**
- * Fetch every draft across all generations, joined to its moment, optionally
- * filtered by status / variant / rating. Newest-first.
+ * Fetch every draft across all generations, optionally filtered. Newest-first.
  *
- * Spread each row into a plain object before returning so callers passing
- * results to Client Components don't trip BIPS-L4.
+ * Uses an INNER FK join (`moments!inner(...)`) so we can filter on
+ * `moments.repo` — PostgREST requires an explicit inner-join to apply
+ * filters on embedded resources.
  */
-export function getAllDrafts(filters: HistoryFilters = {}): HistoryDraft[] {
-  const where: string[] = [];
-  const params: Array<string | number> = [];
+export async function getAllDrafts(
+  filters: HistoryFilters = {},
+): Promise<HistoryDraft[]> {
+  let query = supabase
+    .from("drafts")
+    .select(
+      `id, moment_id, variant, content, status, rating,
+       posted_url, posted_at, created_at, updated_at,
+       moments!inner (
+         summary, source_type, created_at, repo
+       )`,
+    )
+    .order("updated_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(500);
 
   if (filters.status && filters.status !== "all") {
-    where.push("d.status = ?");
-    params.push(filters.status);
+    query = query.eq("status", filters.status);
   }
   if (filters.variant && filters.variant !== "all") {
-    where.push("d.variant = ?");
-    params.push(filters.variant);
+    query = query.eq("variant", filters.variant);
   }
   if (filters.rating) {
     if (filters.rating === "unrated") {
-      where.push("d.rating IS NULL");
+      query = query.is("rating", null);
     } else if (filters.rating !== "all") {
-      where.push("d.rating = ?");
-      params.push(filters.rating);
+      query = query.eq("rating", filters.rating);
     }
   }
   if (filters.repo && filters.repo !== "all") {
     if (filters.repo === "general") {
-      where.push("m.repo IS NULL");
+      query = query.is("moments.repo", null);
     } else {
-      where.push("m.repo = ?");
-      params.push(filters.repo);
+      query = query.eq("moments.repo", filters.repo);
     }
   }
 
-  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
-
-  const sql = `
-    SELECT
-      d.id, d.moment_id, d.variant, d.content, d.status, d.rating,
-      d.posted_url, d.posted_at, d.created_at, d.updated_at,
-      m.summary AS moment_summary,
-      m.source_type AS moment_source_type,
-      m.created_at AS moment_created_at,
-      m.repo AS moment_repo
-    FROM drafts d
-    JOIN moments m ON m.id = d.moment_id
-    ${whereClause}
-    ORDER BY d.updated_at DESC, d.id DESC
-    LIMIT 500
-  `;
-
-  const rows = db.prepare(sql).all(...params) as HistoryDraft[];
-  // Spread each row to a plain {} so the page can pass them as props to the
-  // client RatingButtons component (per BIPS-L4).
-  return rows.map((r) => ({ ...r }));
+  const { data, error } = await query;
+  if (error) throw new Error(`getAllDrafts: ${error.message}`);
+  return (data ?? []).map((row) => flatten(row as unknown as DraftWithMomentRow));
 }
 
 /** Set or clear a draft's rating. Pass null to clear. */
-export function setDraftRating(
+export async function setDraftRating(
   draftId: number,
   rating: DraftRating | null,
-): void {
-  db.prepare(
-    `UPDATE drafts SET rating = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-  ).run(rating, draftId);
+): Promise<void> {
+  const { error } = await supabase
+    .from("drafts")
+    .update({ rating, updated_at: new Date().toISOString() })
+    .eq("id", draftId);
+  if (error) throw new Error(`setDraftRating(${draftId}): ${error.message}`);
 }
 
 /**
- * Pull up to `count` random starred drafts to feed into Claude as voice
- * examples. Posted drafts are preferred (they're the ones that actually
- * went out) but any starred draft qualifies.
+ * Pull up to `count` starred drafts as voice examples for the Claude prompt.
+ * Posted-and-starred entries are preferred over just-starred — the former
+ * is a stronger signal that the voice actually worked publicly.
+ *
+ * Postgres doesn't have a `RANDOM()` modifier in PostgREST queries, so we
+ * fetch ALL starred drafts and sample client-side. At single-user scale
+ * (likely <100 starred drafts in a year) this is trivial.
  */
-export function getStarredExamples(count: number): HistoryDraft[] {
+export async function getStarredExamples(count: number): Promise<HistoryDraft[]> {
   const safe = Math.min(Math.max(1, Math.floor(count)), 50);
-  // ORDER BY (status='posted') DESC puts posted entries first within the
-  // RANDOM() sample. Subtle but right — a starred posted draft is a stronger
-  // signal than a starred draft that never shipped.
-  const rows = db
-    .prepare(
-      `SELECT
-         d.id, d.moment_id, d.variant, d.content, d.status, d.rating,
-         d.posted_url, d.posted_at, d.created_at, d.updated_at,
-         m.summary AS moment_summary,
-         m.source_type AS moment_source_type,
-         m.created_at AS moment_created_at,
-         m.repo AS moment_repo
-       FROM drafts d
-       JOIN moments m ON m.id = d.moment_id
-       WHERE d.rating = 'star'
-       ORDER BY (d.status = 'posted') DESC, RANDOM()
-       LIMIT ?`,
+
+  const { data, error } = await supabase
+    .from("drafts")
+    .select(
+      `id, moment_id, variant, content, status, rating,
+       posted_url, posted_at, created_at, updated_at,
+       moments!inner (
+         summary, source_type, created_at, repo
+       )`,
     )
-    .all(safe) as HistoryDraft[];
-  return rows.map((r) => ({ ...r }));
+    .eq("rating", "star");
+  if (error) throw new Error(`getStarredExamples: ${error.message}`);
+
+  const all = (data ?? []).map((row) =>
+    flatten(row as unknown as DraftWithMomentRow),
+  );
+
+  // Posted-and-starred float to the top within the random sample, mirroring
+  // the original `ORDER BY (status='posted') DESC, RANDOM()` SQL semantics.
+  const posted = all.filter((d) => d.status === "posted");
+  const others = all.filter((d) => d.status !== "posted");
+  shuffleInPlace(posted);
+  shuffleInPlace(others);
+  return [...posted, ...others].slice(0, safe);
+}
+
+/** Count drafts grouped by status — used by the history page header. */
+export async function getDraftCountsByStatus(): Promise<Record<string, number>> {
+  const { data, error } = await supabase.from("drafts").select("status");
+  if (error) throw new Error(`getDraftCountsByStatus: ${error.message}`);
+
+  const result: Record<string, number> = {};
+  for (const row of data ?? []) {
+    result[row.status] = (result[row.status] ?? 0) + 1;
+  }
+  return result;
 }
 
 /**
  * Distinct repos that appear on at least one moment in the DB. Used to
- * populate the History page's project-filter dropdown.
- *
- * Returns an array of "owner/name" strings, sorted alphabetically. Does NOT
- * include "general" — the page handles that as a separate option.
+ * populate the History page's project-filter dropdown. Sorted alphabetically.
+ * Does NOT include "general" — the page handles that as a separate option.
  */
-export function getProjectsInHistory(): string[] {
-  const rows = db
-    .prepare(
-      `SELECT DISTINCT repo FROM moments WHERE repo IS NOT NULL ORDER BY repo ASC`,
-    )
-    .all() as Array<{ repo: string }>;
-  return rows.map((r) => r.repo);
+export async function getProjectsInHistory(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("moments")
+    .select("repo")
+    .not("repo", "is", null);
+  if (error) throw new Error(`getProjectsInHistory: ${error.message}`);
+
+  const unique = new Set<string>();
+  for (const row of data ?? []) {
+    if (typeof row.repo === "string" && row.repo.length > 0) {
+      unique.add(row.repo);
+    }
+  }
+  return Array.from(unique).sort();
 }
 
-/** Count drafts grouped by status — used by the page header. */
-export function getDraftCountsByStatus(): Record<string, number> {
-  const rows = db
-    .prepare(`SELECT status, COUNT(*) AS count FROM drafts GROUP BY status`)
-    .all() as Array<{ status: string; count: number }>;
-  const result: Record<string, number> = {};
-  for (const r of rows) result[r.status] = r.count;
-  return result;
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function shuffleInPlace<T>(arr: T[]): void {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
 }

@@ -18,7 +18,7 @@ export function displayProjectName(fullName: string): string {
  * Returns the absolute date for anything more than ~5 weeks out.
  */
 export function relativeFuture(input: string | Date): string {
-  const then = typeof input === "string" ? parseSqliteTimestamp(input) : input;
+  const then = typeof input === "string" ? parseTimestamp(input) : input;
 
   const seconds = Math.max(0, Math.round((then.getTime() - Date.now()) / 1000));
 
@@ -39,9 +39,26 @@ export function relativeFuture(input: string | Date): string {
   })}`;
 }
 
-/** Shared SQLite-timestamp → Date parser. Pinned to UTC. */
-function parseSqliteTimestamp(input: string): Date {
-  return new Date(input.replace(" ", "T") + (input.endsWith("Z") ? "" : "Z"));
+/**
+ * Robust timestamp parser. Handles both:
+ *   - Postgres `timestamptz` strings as returned by Supabase, e.g.
+ *     "2026-05-25T13:42:00+00:00" — already valid ISO 8601, parses directly.
+ *   - Legacy SQLite `CURRENT_TIMESTAMP` strings, e.g. "2026-05-25 13:42:00"
+ *     — no T separator, no timezone marker, needs both added.
+ *
+ * The previous implementation unconditionally appended "Z", which corrupted
+ * Postgres strings that already had a "+00:00" offset and produced Invalid
+ * Date everywhere. We try direct parse first, fall back to the SQLite-shape
+ * fix-up if that fails.
+ */
+export function parseTimestamp(input: string): Date {
+  // Postgres ISO 8601 with offset or Z works directly.
+  const direct = new Date(input);
+  if (!isNaN(direct.getTime())) return direct;
+
+  // Fall back to the SQLite shape ("YYYY-MM-DD HH:MM:SS" → ISO + Z).
+  const fixed = input.replace(" ", "T") + (input.endsWith("Z") ? "" : "Z");
+  return new Date(fixed);
 }
 
 /**
@@ -55,7 +72,7 @@ function parseSqliteTimestamp(input: string): Date {
  */
 export function relativeTime(input: string | Date): string {
   const then =
-    typeof input === "string" ? parseSqliteTimestamp(input) : input;
+    typeof input === "string" ? parseTimestamp(input) : input;
 
   const seconds = Math.max(0, Math.round((Date.now() - then.getTime()) / 1000));
 
