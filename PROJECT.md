@@ -26,7 +26,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 ## Current phase
 
-**Phase 1 — Local MVP.** Stages 1–3 complete. Both API keys validated, watched repos selected, schedule + tone preferences saved. Stage 4 next: pull commits from watched repos with Octokit, cache them in SQLite, render raw on a debug page.
+**Phase 1 — Local MVP.** Stages 1–4 complete. Real GitHub commits flowing into the local SQLite cache via Octokit's paginate helper; `/debug/commits` shows them raw. Stage 5 next: feed those commits + notes into Claude with a structured-output schema, render one drafted "moment" end-to-end.
 
 ---
 
@@ -34,6 +34,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 <!-- Reverse-chronological log. Append new bullets at the top with each user-visible change. Each bullet: YYYY-MM-DD — what shipped. -->
 
+- **2026-05-25** — Stage 4 shipped: GitHub commit sync via Octokit's `paginate` helper. Last 7 days of commits per watched repo, cached in SQLite, idempotent re-runs thanks to a `(repo, sha)` UNIQUE constraint. Per-repo error handling (a 404 on one repo doesn't abort the whole sync). `/debug/commits` renders the cache with relative timestamps + short SHAs.
 - **2026-05-25** — Stage 3 shipped: Settings page with API-key status cards, inline "how to get this key" walk-throughs for Anthropic and GitHub, smoke-test buttons that hit each API for real, watched-repos multi-select fed by the user's GitHub repo list, and schedule + banned-words + style-notes preferences persisting to the `settings` table.
 - **2026-05-25** — Stage 2 shipped: SQLite via Node's built-in `node:sqlite` module (no native bindings, no Visual Studio Build Tools dependency). Notes page saves and lists with relative timestamps. Full schema for the whole app created on first boot (notes, watched_repos, commits, moments, drafts, settings).
 - **2026-05-25** — Stage 1 shipped: project docs in place, WyCo-branded dashboard renders on localhost:3000, private GitHub repo created at bencoton/build-in-public-studio, first commit pushed.
@@ -44,12 +45,12 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 **This week:**
 
-- Stage 4 — GitHub sync via Octokit. The last 7 days of commits from each watched repo, pulled and cached in SQLite, rendered raw on a `/debug/commits` page with a manual "Sync now" trigger.
-- Stage 5 — Claude drafting for one moment, rendering structured JSON output. The first end-to-end "GitHub commits + notes → draft post" round trip.
+- Stage 5 — Claude drafting for one moment, rendering structured JSON output. The first end-to-end "GitHub commits + notes → draft post" round trip. Uses Anthropic SDK with `tool_use` for typed output and `cache_control` for the stable system prompt.
+- Stage 6 — Full dashboard with both draft variants per moment, edit / regenerate / approve / reject buttons.
 
 **Next week:**
 
-- Stage 6 — Full dashboard with both draft variants per moment, edit / regenerate / approve / reject buttons.
+- Stage 7 — Copy + Open flow for X and Indie Hackers, with the "Did you publish it?" follow-up that captures the published URL.
 
 ---
 

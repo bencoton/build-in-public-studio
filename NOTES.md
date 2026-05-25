@@ -4,6 +4,16 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-05-25 — Stage 4 shipped
+
+- GitHub commit sync built on **Octokit** (the official SDK from GitHub). First "real outside data" stage. Pure-JS install, no Stage 2-style native-binding drama.
+- `octokit.paginate(rest.repos.listCommits, { owner, repo, since, per_page: 100 })` flattens all pages into a single array — saves us writing a pagination loop by hand. `since` set to 7 days ago.
+- Idempotent re-runs via `INSERT INTO commits ... ON CONFLICT(repo, sha) DO NOTHING`. Hitting "Sync now" twice returns "0 new" the second time, exactly as it should.
+- Per-repo error handling instead of throw-on-first-error: a 404 on one repo (token doesn't have access) is collected into a `failures` list rather than aborting the whole sync. The UI shows successes and failures side-by-side.
+- `/debug/commits` is intentionally not linked in the sidebar — it's an inspection view, not a product feature. Reach via URL or (eventually) the dashboard "Sync GitHub" button which gets wired up in Stage 6.
+- File-count per commit is deliberately left null in the cache. The list endpoint doesn't include it, and fetching it would mean a per-commit API call — wasteful when we only need counts for the moments Claude selects. Stage 5 can fetch them lazily.
+- Ben confirmed the round-trip end-to-end: commits visible, persist across restart, idempotent re-sync.
+
 ## 2026-05-25 — Stage 3 shipped
 
 - Settings page now does four things: shows API-key state (read from `.env.local` server-side, never the database), validates each key with a tiny real API call, lists the user's GitHub repos for multi-select watching, persists schedule + banned-words + style-notes to the `settings` table.
