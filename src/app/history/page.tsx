@@ -13,7 +13,7 @@ import {
   type DraftRating,
 } from "@/lib/history";
 import type { DraftStatus } from "@/lib/draft-mutations";
-import { relativeTime } from "@/lib/format";
+import { relativeTime, displayProjectName } from "@/lib/format";
 
 import { HistoryFilters } from "./filters";
 import { RatingButtons } from "./rating-buttons";
@@ -100,7 +100,9 @@ export default function HistoryPage({
                         <Badge
                           variant={draft.moment_repo ? "outline" : "secondary"}
                         >
-                          {draft.moment_repo ?? "General"}
+                          {draft.moment_repo
+                            ? displayProjectName(draft.moment_repo)
+                            : "General"}
                         </Badge>
                         <span className="text-muted-foreground">
                           {relativeTime(draft.updated_at)}

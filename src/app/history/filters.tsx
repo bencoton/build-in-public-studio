@@ -7,6 +7,8 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useTransition } from "react";
 import { Loader2 } from "lucide-react";
 
+import { displayProjectName } from "@/lib/format";
+
 const STATUS_OPTIONS = [
   { value: "all", label: "All statuses" },
   { value: "draft", label: "Draft" },
@@ -107,7 +109,7 @@ export function HistoryFilters({ projects }: Props) {
         <option value="general">(General / multi-repo)</option>
         {projects.map((p) => (
           <option key={p} value={p}>
-            {p}
+            {displayProjectName(p)}
           </option>
         ))}
       </select>

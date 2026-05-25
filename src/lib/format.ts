@@ -1,4 +1,18 @@
 /**
+ * Strip the "owner/" prefix from a "owner/repo" GitHub identifier for display.
+ * The DB and URL params keep the full form so we never have ambiguity between
+ * two repos with the same name under different owners — but the UI doesn't
+ * need to remind the user of their own GitHub username on every label.
+ *
+ * "bencoton/build-in-public-studio" → "build-in-public-studio"
+ * "General"                          → "General" (unchanged)
+ */
+export function displayProjectName(fullName: string): string {
+  const slash = fullName.lastIndexOf("/");
+  return slash === -1 ? fullName : fullName.slice(slash + 1);
+}
+
+/**
  * Tiny "5 minutes ago" formatter — avoids pulling in date-fns just for this.
  * Stage 9 (the cron scheduler) will need real timezone handling and at that
  * point we add date-fns properly.

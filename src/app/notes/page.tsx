@@ -2,7 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getRecentNotes } from "@/lib/notes";
 import { getWatchedRepos } from "@/lib/settings";
-import { relativeTime } from "@/lib/format";
+import { relativeTime, displayProjectName } from "@/lib/format";
 
 import { NoteForm } from "./note-form";
 import { DeleteNoteButton } from "./delete-note-button";
@@ -48,7 +48,7 @@ export default function NotesPage() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 text-xs font-mono">
                         <Badge variant={note.repo ? "outline" : "secondary"}>
-                          {note.repo ?? "General"}
+                          {note.repo ? displayProjectName(note.repo) : "General"}
                         </Badge>
                         <span className="text-muted-foreground">
                           {relativeTime(note.created_at)}

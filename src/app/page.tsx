@@ -8,7 +8,7 @@ import {
 import { Sparkles } from "lucide-react";
 
 import { getLatestGeneration, type MomentWithDrafts } from "@/lib/moments";
-import { relativeTime } from "@/lib/format";
+import { relativeTime, displayProjectName } from "@/lib/format";
 
 import { GenerateNowButton } from "@/components/dashboard/generate-now-button";
 import { MomentCard } from "@/components/dashboard/moment-card";
@@ -167,7 +167,9 @@ function buildProjectView(
     const list = buckets.get(key)!;
     tabs.push({
       key,
-      label: key,
+      // Strip the "owner/" prefix for display — your own username on every
+      // tab is noise. The key keeps the full form for URL stability.
+      label: displayProjectName(key),
       count: list.length,
       allActioned: list.every(momentFullyActioned),
     });
@@ -193,5 +195,5 @@ function momentFullyActioned(moment: MomentWithDrafts): boolean {
 
 function prettyKey(key: string): string {
   if (key === "general") return "General";
-  return key;
+  return displayProjectName(key);
 }
