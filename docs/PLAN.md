@@ -4,7 +4,7 @@
 
 ---
 
-## Phase 0 — Scaffolding (this session)
+## Phase 0 — Scaffolding ✅ shipped 2026-05-25
 
 **Goal:** the dashboard renders end-to-end on `localhost:3000` and the project conforms to WyCo conventions before any feature code is written.
 
@@ -37,7 +37,7 @@
 
 Each stage stops for verification before the next starts.
 
----
+**Progress as of 2026-05-25:** Stages 2–8 shipped. Stages 9 and 10 remain.
 
 ---
 

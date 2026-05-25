@@ -24,9 +24,9 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 ---
 
-**Phase 1 — Local MVP.** Stages 1–8 complete. The app does its full core job end-to-end: pulls commits + notes, drafts moments via Claude, lets you edit / regenerate / approve / reject / Copy+Open / mark-posted per variant, and lets you star posts that worked so the voice loop learns over time. Notes and moments are project-aware; the dashboard filters by project as pill tabs that turn lime when fully actioned. Stages 9 (scheduler + desktop notifications) and 10 (polish + light-mode toggle) are the remaining feature stages before the Phase 2 OSS launch.
-
 ## Current phase
+
+**Phase 1 — Local MVP.** Stages 1–8 complete. The app does its full core job end-to-end: pulls commits + notes, drafts moments via Claude, lets you edit / regenerate / approve / reject / Copy+Open / mark-posted per variant, and lets you star posts that worked so the voice loop learns over time. Notes and moments are project-aware; the dashboard filters by project as pill tabs that turn lime when fully actioned. Stages 9 (scheduler + desktop notifications) and 10 (polish + light-mode toggle) are the remaining feature stages before the Phase 2 OSS launch.
 
 ---
 
