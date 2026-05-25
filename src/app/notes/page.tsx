@@ -1,21 +1,59 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { getRecentNotes } from "@/lib/notes";
+import { relativeTime } from "@/lib/format";
 
-// Placeholder. Stage 2 will turn this into the real Notes page (textarea
-// + SQLite-backed list of recent notes, markdown supported).
+import { NoteForm } from "./note-form";
+
+// The notes page is a Server Component (no "use client" at the top). That means
+// the database read happens server-side during render — no API route needed.
+// The form below is a Client Component for its interactivity.
+
 export default function NotesPage() {
+  const notes = getRecentNotes(50);
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="space-y-1">
-        <h2 className="text-2xl font-semibold tracking-tight">Notes</h2>
-        <p className="text-sm text-muted-foreground">
-          Quick capture for things worth writing about later.
+    <div className="max-w-3xl mx-auto space-y-10">
+      <div className="space-y-2">
+        <h2 className="text-3xl font-semibold tracking-tight">Notes</h2>
+        <p className="text-base text-muted-foreground max-w-2xl">
+          Quick capture for the things worth writing about later — the "why"
+          behind your work that a git log will never see. Used as input for the
+          weekly draft generator.
         </p>
       </div>
-      <Card>
-        <CardContent className="py-12 text-center text-sm text-muted-foreground">
-          Coming in Stage 2.
-        </CardContent>
-      </Card>
+
+      <NoteForm />
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+          Recent notes
+        </h3>
+
+        {notes.length === 0 ? (
+          <Card>
+            <CardContent className="py-10 text-center text-sm text-muted-foreground">
+              No notes yet. The textarea above is where you write the first one.
+            </CardContent>
+          </Card>
+        ) : (
+          <ul className="space-y-3">
+            {notes.map((note) => (
+              <li key={note.id}>
+                <Card>
+                  <CardContent className="py-4 space-y-2">
+                    <div className="text-xs font-mono text-muted-foreground">
+                      {relativeTime(note.created_at)}
+                    </div>
+                    <div className="text-sm whitespace-pre-wrap leading-relaxed">
+                      {note.content}
+                    </div>
+                  </CardContent>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
