@@ -8,12 +8,15 @@ export type HistoryDraft = DraftRow & {
   moment_summary: string;
   moment_source_type: string;
   moment_created_at: string;
+  moment_repo: string | null;
 };
 
 export type HistoryFilters = {
   status?: DraftStatus | "all";
   variant?: "x_thread" | "ih_long" | "all";
   rating?: DraftRating | "unrated" | "all";
+  /** "owner/name" of a watched repo, "general" for NULL-repo moments, or "all" / undefined for no filter. */
+  repo?: string;
 };
 
 /**
@@ -43,6 +46,14 @@ export function getAllDrafts(filters: HistoryFilters = {}): HistoryDraft[] {
       params.push(filters.rating);
     }
   }
+  if (filters.repo && filters.repo !== "all") {
+    if (filters.repo === "general") {
+      where.push("m.repo IS NULL");
+    } else {
+      where.push("m.repo = ?");
+      params.push(filters.repo);
+    }
+  }
 
   const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
 
@@ -52,7 +63,8 @@ export function getAllDrafts(filters: HistoryFilters = {}): HistoryDraft[] {
       d.posted_url, d.posted_at, d.created_at, d.updated_at,
       m.summary AS moment_summary,
       m.source_type AS moment_source_type,
-      m.created_at AS moment_created_at
+      m.created_at AS moment_created_at,
+      m.repo AS moment_repo
     FROM drafts d
     JOIN moments m ON m.id = d.moment_id
     ${whereClause}
@@ -93,7 +105,8 @@ export function getStarredExamples(count: number): HistoryDraft[] {
          d.posted_url, d.posted_at, d.created_at, d.updated_at,
          m.summary AS moment_summary,
          m.source_type AS moment_source_type,
-         m.created_at AS moment_created_at
+         m.created_at AS moment_created_at,
+         m.repo AS moment_repo
        FROM drafts d
        JOIN moments m ON m.id = d.moment_id
        WHERE d.rating = 'star'
@@ -102,6 +115,22 @@ export function getStarredExamples(count: number): HistoryDraft[] {
     )
     .all(safe) as HistoryDraft[];
   return rows.map((r) => ({ ...r }));
+}
+
+/**
+ * Distinct repos that appear on at least one moment in the DB. Used to
+ * populate the History page's project-filter dropdown.
+ *
+ * Returns an array of "owner/name" strings, sorted alphabetically. Does NOT
+ * include "general" — the page handles that as a separate option.
+ */
+export function getProjectsInHistory(): string[] {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT repo FROM moments WHERE repo IS NOT NULL ORDER BY repo ASC`,
+    )
+    .all() as Array<{ repo: string }>;
+  return rows.map((r) => r.repo);
 }
 
 /** Count drafts grouped by status — used by the page header. */

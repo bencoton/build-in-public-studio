@@ -3,10 +3,11 @@ import { randomUUID } from "node:crypto";
 
 import { getAnthropicKey } from "./env-keys";
 import { getBannedWords, getStyleNotes } from "./settings";
-import { getRecentNotes } from "./notes";
+import { getRecentNotes, getNoteById } from "./notes";
 import { getRecentCommits } from "./commits";
 import { insertMomentWithDrafts } from "./moments";
 import { getStarredExamples, type HistoryDraft } from "./history";
+import { db } from "./db";
 import { DRAFT_SYSTEM_PROMPT } from "@/prompts/draft-system";
 
 /*
@@ -177,6 +178,7 @@ export async function generateDrafts(): Promise<GenerationResult> {
   // Persist. Each generation gets a UUID so we can group its moments later.
   const generationId = randomUUID();
   for (const moment of parsed) {
+    const repo = deriveMomentRepo(moment.source_type, moment.source_refs);
     insertMomentWithDrafts({
       summary: moment.summary,
       sourceType: moment.source_type,
@@ -184,6 +186,7 @@ export async function generateDrafts(): Promise<GenerationResult> {
       generationId,
       xThread: moment.x_thread,
       ihLong: moment.ih_long,
+      repo,
     });
   }
 
@@ -280,6 +283,51 @@ function buildUserMessage(args: {
 function firstLine(s: string): string {
   const i = s.indexOf("\n");
   return i === -1 ? s : s.slice(0, i);
+}
+
+/**
+ * Best-effort: figure out which watched repo a moment is about, based on its
+ * source refs. Returns the common repo if all refs point to the same one,
+ * otherwise null. Used to persist `moments.repo` for history filtering.
+ *
+ * Each ref might be:
+ *   - a short or full commit SHA (hex chars only)
+ *   - a numeric note id
+ *
+ * We try both lookups per ref. Cheap — only runs once per moment at insert.
+ */
+function deriveMomentRepo(
+  _sourceType: string,
+  sourceRefs: string[],
+): string | null {
+  const repos = new Set<string>();
+  for (const ref of sourceRefs) {
+    const trimmed = ref.trim();
+    if (!trimmed) continue;
+
+    // Try as a note id first (numeric).
+    if (/^\d+$/.test(trimmed)) {
+      const note = getNoteById(Number(trimmed));
+      if (note?.repo) repos.add(note.repo);
+      continue;
+    }
+
+    // Try as a commit SHA prefix (hex chars). LIKE '<prefix>%' matches both
+    // short SHAs (the format we feed Claude) and full SHAs (if Claude echoed
+    // a longer form).
+    if (/^[0-9a-f]{4,40}$/i.test(trimmed)) {
+      const rows = db
+        .prepare("SELECT DISTINCT repo FROM commits WHERE sha LIKE ?")
+        .all(`${trimmed.toLowerCase()}%`) as Array<{ repo: string }>;
+      for (const r of rows) repos.add(r.repo);
+    }
+  }
+
+  if (repos.size === 1) {
+    return [...repos][0];
+  }
+  // Zero or multiple repos — leave null (general / multi-repo / unknown).
+  return null;
 }
 
 function parseTimestamp(s: string): Date {

@@ -1,6 +1,6 @@
 "use client";
 
-// Three select dropdowns wired to URL search params. Changing any one pushes
+// Four select dropdowns wired to URL search params. Changing any one pushes
 // the new URL; the server component re-renders with the new searchParams.
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
@@ -29,7 +29,12 @@ const RATING_OPTIONS = [
   { value: "unrated", label: "Unrated" },
 ] as const;
 
-export function HistoryFilters() {
+type Props = {
+  /** "owner/name" of each repo that appears on any moment, for the Project select. */
+  projects: string[];
+};
+
+export function HistoryFilters({ projects }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -88,6 +93,21 @@ export function HistoryFilters() {
         {RATING_OPTIONS.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
+          </option>
+        ))}
+      </select>
+
+      <select
+        className={`${selectClass} font-mono`}
+        value={searchParams.get("repo") ?? "all"}
+        onChange={(e) => updateParam("repo", e.target.value)}
+        aria-label="Filter by project"
+      >
+        <option value="all">All projects</option>
+        <option value="general">(General / multi-repo)</option>
+        {projects.map((p) => (
+          <option key={p} value={p}>
+            {p}
           </option>
         ))}
       </select>

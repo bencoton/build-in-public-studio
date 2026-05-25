@@ -49,7 +49,7 @@ export function getDraftWithMoment(
 
   const moment = db
     .prepare(
-      `SELECT id, summary, source_type, source_ref, generation_id, created_at
+      `SELECT id, summary, source_type, source_ref, generation_id, created_at, repo
          FROM moments WHERE id = ?`,
     )
     .get(draft.moment_id) as MomentRow | undefined;

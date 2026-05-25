@@ -8,6 +8,7 @@ import { ExternalLink } from "lucide-react";
 import {
   getAllDrafts,
   getDraftCountsByStatus,
+  getProjectsInHistory,
   type HistoryFilters as Filters,
   type DraftRating,
 } from "@/lib/history";
@@ -17,7 +18,7 @@ import { relativeTime } from "@/lib/format";
 import { HistoryFilters } from "./filters";
 import { RatingButtons } from "./rating-buttons";
 
-// Server component. searchParams come from the URL (?status=...&variant=...&rating=...)
+// Server component. searchParams come from the URL (?status=...&variant=...&rating=...&repo=...)
 // and drive a single DB query. The filter dropdowns push new URLs; this page
 // re-renders with the new params.
 
@@ -32,10 +33,20 @@ export default function HistoryPage({
 }: {
   searchParams: SearchParams;
 }) {
+  const projects = getProjectsInHistory();
+
+  // Repo filter accepts "all", "general", or any value that appears in `projects`.
+  // Anything else (stale URL after a repo got removed, manual hand-typed values)
+  // is silently treated as "all" so the page never breaks on a bad search param.
+  const rawRepo = typeof searchParams.repo === "string" ? searchParams.repo : "all";
+  const repoFilter =
+    rawRepo === "general" || projects.includes(rawRepo) ? rawRepo : "all";
+
   const filters: Filters = {
     status: pickEnum(searchParams.status, VALID_STATUS) ?? "all",
     variant: pickEnum(searchParams.variant, VALID_VARIANT) ?? "all",
     rating: pickEnum(searchParams.rating, VALID_RATING) ?? "all",
+    repo: repoFilter,
   };
 
   const drafts = getAllDrafts(filters);
@@ -60,7 +71,7 @@ export default function HistoryPage({
             {total} draft{total === 1 ? "" : "s"} total &middot;{" "}
             <span className="text-foreground">{posted} posted</span>
           </div>
-          <HistoryFilters />
+          <HistoryFilters projects={projects} />
         </CardContent>
       </Card>
 
@@ -79,13 +90,18 @@ export default function HistoryPage({
                   {/* Header row — moment summary + metadata + rating buttons */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1 min-w-0 flex-1">
-                      <div className="flex items-center gap-2 text-xs font-mono">
+                      <div className="flex items-center gap-2 text-xs font-mono flex-wrap">
                         <Badge variant="outline">
                           {draft.variant === "x_thread"
                             ? "X thread"
                             : "Indie Hackers"}
                         </Badge>
                         <StatusBadge status={draft.status as DraftStatus} />
+                        <Badge
+                          variant={draft.moment_repo ? "outline" : "secondary"}
+                        >
+                          {draft.moment_repo ?? "General"}
+                        </Badge>
                         <span className="text-muted-foreground">
                           {relativeTime(draft.updated_at)}
                         </span>

@@ -31,6 +31,10 @@ export type MomentWithDrafts = MomentRow & {
 /**
  * Insert a moment along with its two draft variants. Returns the new moment_id.
  * Wrapped in a transaction so a partial failure doesn't leave a half-saved moment.
+ *
+ * @param args.repo  Derived primary repo for the moment, or null for general /
+ *                   multi-repo / unknown. Persisted on the moments row so the
+ *                   history page can filter by it.
  */
 export function insertMomentWithDrafts(args: {
   summary: string;
@@ -39,18 +43,20 @@ export function insertMomentWithDrafts(args: {
   generationId: string;
   xThread: string;
   ihLong: string;
+  repo: string | null;
 }): number {
   return transaction(() => {
     const momentResult = db
       .prepare(
-        `INSERT INTO moments (summary, source_type, source_ref, generation_id)
-           VALUES (?, ?, ?, ?)`,
+        `INSERT INTO moments (summary, source_type, source_ref, generation_id, repo)
+           VALUES (?, ?, ?, ?, ?)`,
       )
       .run(
         args.summary,
         args.sourceType,
         JSON.stringify(args.sourceRefs),
         args.generationId,
+        args.repo,
       ) as { lastInsertRowid: number | bigint };
     const momentId = Number(momentResult.lastInsertRowid);
 
@@ -78,7 +84,7 @@ export function getLatestGeneration(): MomentWithDrafts[] {
 export function getMomentsByGeneration(generationId: string): MomentWithDrafts[] {
   const moments = db
     .prepare(
-      `SELECT id, summary, source_type, source_ref, generation_id, created_at
+      `SELECT id, summary, source_type, source_ref, generation_id, created_at, repo
          FROM moments
          WHERE generation_id = ?
          ORDER BY id ASC`,
