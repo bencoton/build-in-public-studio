@@ -4,6 +4,21 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-05-25 — Stage 9b.2 shipped — DB layer fully on Supabase
+
+Three rounds of methodical porting:
+
+- **Round 1 (settings + notes)** — simplest tables, smallest verification surface (`/notes`, `/settings`). Got the async/await propagation pattern established. Every DB read in a server component became `async` with `await`; many got `Promise.all` for parallel reads. The `app-header` was already async from the earlier scheduler attempt, just needed the await.
+- **Round 2 (commits)** — `/debug/commits` was the test surface. `upsertCommit` ported to Supabase's `.upsert({}, { onConflict: 'repo,sha', ignoreDuplicates: true })`, returning rows only when something was actually inserted (count > 0 means new). The `deriveMomentRepo` helper in `claude.ts` lost its last `node:sqlite` query — replaced with a new `getReposForShaPrefix()` in `commits.ts`. claude.ts dropped its `db` import for the first time.
+- **Round 3 (moments + drafts + history + posting)** — the JOIN-heavy chunk. `insertMomentWithDrafts` became a thin wrapper around the Postgres RPC function for real ACID semantics (replacing what we used to get from `db.transaction()`). `getLatestGeneration` and friends use PostgREST's FK-join syntax (`moments(...)` nested select). `history.ts`'s `getAllDrafts` uses `moments!inner(...)` so we can filter on `moments.repo`. Random sampling for `getStarredExamples` and GROUP BY aggregations done client-side because PostgREST doesn't expose RANDOM() or GROUP BY directly — at single-user scale this is cheap.
+- **Bug caught during Round 3 verification**: timestamps all showed "Invalid Date". The previous `parseSqliteTimestamp` helper unconditionally appended a `"Z"` to anything missing one. Postgres ISO strings come back as `"2026-05-25T13:42:00+00:00"` — already valid, the appended `"Z"` corrupted them into `"2026-05-25T13:42:00+00:00Z"` which JS couldn't parse. Fixed by trying direct parse first, falling back to the SQLite shape only if needed. Renamed to `parseTimestamp` and exported so `claude.ts` could drop its duplicate helper.
+
+**`db.ts` deleted** — zero callers remain. Project no longer imports `node:sqlite` anywhere. Vercel can deploy it as a pure pure-JS Next.js + Postgres app.
+
+**Voice-learning loop** — Ben deferred testing to user acceptance / weekly real-use cycle. The code paths are wired; whether the prompt actually shifts voice in a noticeable way is a multi-week judgement, not a same-day verification.
+
+Net effect: ~10 files ported, ~10 caller files updated, one file deleted. Bug-class lessons unchanged (no new BIPS-L#). Migration was almost entirely mechanical — the architectural rethink in Phase B of the previous session was where the real thinking happened.
+
 ## 2026-05-25 — Stage 9 abandoned; pivot to Supabase + Vercel; 9b.1 shipped
 
 A long, important session. Three phases:
