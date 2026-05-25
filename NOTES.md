@@ -4,6 +4,14 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-05-25 — Stage 6 shipped
+
+- The dashboard is the real dashboard now. Latest generation's moments at `/`, one card each, hand-rolled tabs (no `@radix-ui/react-tabs` dep — two-tab toggles don't justify it). Each variant card owns its own edit / regenerate / approve / reject / revert lifecycle as a client component.
+- **Single-variant regenerate** is the per-moment fast path: smaller Claude prompt, smaller tool schema (one string output), `max_tokens: 1024` instead of 4096, same cached system prompt for cache-hit savings. Wall-clock 5–10s vs the full generation's 45–90s — exactly the user experience we want for "I don't quite like this draft, try again".
+- Tabs aren't shadcn-Radix; they're a `<button>` pair with `useState`. Small status dot next to each label so you can see at a glance whether the X variant or the IH variant is approved.
+- **Bug hit during Stage 6:** `Only plain objects ... can be passed to Client Components`. Caused by `node:sqlite` rows being null-prototype objects which Next.js's RSC serializer rejects. Fixed by spreading each row (`{...d}`) in `getLatestGeneration` before returning. Captured as **BIPS-L4** in CLAUDE.md. Loop closed in one round-trip again — symptom → identified null-prototype rows from the trio of `node:sqlite` quirks (now L2 / L3 / L4) → fix → audit (one location) → capture.
+- Audit ran: every other Server-Component reading from `node:sqlite` renders rows directly in JSX (Notes, Commits, the Draft debug view) rather than passing them to a Client Component, so the same bug couldn't surface there. Worth knowing for any future page that adds new Client Components consuming DB data — spread defensively in the data-access layer.
+
 ## 2026-05-25 — Stage 5 shipped
 
 - First end-to-end **"commits + notes → Claude → drafted moments"** call working. Sonnet via `@anthropic-ai/sdk`, `tool_use` for guaranteed structured output, `cache_control: ephemeral` on the system prompt and tool schema for ~90% cache savings on the repeat-call portion.

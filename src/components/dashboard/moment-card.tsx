@@ -10,7 +10,6 @@ import {
   Check,
   X,
   RotateCcw,
-  Copy,
   Loader2,
   AlertCircle,
 } from "lucide-react";
@@ -30,6 +29,7 @@ import {
   setDraftStatusAction,
 } from "@/app/dashboard-actions";
 import type { MomentWithDrafts, DraftRow } from "@/lib/moments";
+import { CopyOpenFlow } from "./copy-open-flow";
 
 type Variant = "x_thread" | "ih_long";
 const VARIANT_LABEL: Record<Variant, string> = {
@@ -153,6 +153,7 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
 
   const isApproved = draft.status === "approved";
   const isRejected = draft.status === "rejected";
+  const isPosted = draft.status === "posted";
 
   return (
     <div className="space-y-3">
@@ -227,7 +228,8 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
           </>
         ) : (
           <>
-            {!isRejected && (
+            {/* Edit + Regenerate available for draft and approved (not rejected, not posted). */}
+            {!isRejected && !isPosted && (
               <>
                 <Button
                   type="button"
@@ -256,8 +258,8 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
               </>
             )}
 
-            {/* Status transitions */}
-            {!isApproved && !isRejected && (
+            {/* Approve + Reject only available from the draft state. */}
+            {!isApproved && !isRejected && !isPosted && (
               <>
                 <Button
                   type="button"
@@ -282,30 +284,21 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
               </>
             )}
 
+            {/* Approved drafts get a Revert button alongside the Copy+Open panel below. */}
             {isApproved && (
-              <>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled
-                  title="Copy + Open ships in Stage 7"
-                >
-                  <Copy className="size-3.5" />
-                  Copy + Open (Stage 7)
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => handleSetStatus("draft")}
-                  disabled={statusPending}
-                >
-                  <RotateCcw className="size-3.5" />
-                  Revert
-                </Button>
-              </>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => handleSetStatus("draft")}
+                disabled={statusPending}
+              >
+                <RotateCcw className="size-3.5" />
+                Revert to draft
+              </Button>
             )}
 
+            {/* Rejected drafts can only be restored to draft. */}
             {isRejected && (
               <Button
                 type="button"
@@ -321,6 +314,13 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
           </>
         )}
       </div>
+
+      {/* Copy + Open flow lives below the action row. Renders the active flow
+          for approved drafts; renders the permanent "posted" panel for posted
+          drafts. Hidden for draft / rejected states. */}
+      {(isApproved || isPosted) && !isEditing && (
+        <CopyOpenFlow draft={draft} />
+      )}
 
       {regenError && (
         <p className="text-sm text-destructive flex items-center gap-1.5">

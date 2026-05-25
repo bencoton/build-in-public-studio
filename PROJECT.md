@@ -26,7 +26,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 ## Current phase
 
-**Phase 1 — Local MVP.** Stages 1–5 complete. End-to-end "commits + notes → drafted moments → rendered on screen" loop works. Stage 6 next: turn the debug view into the proper dashboard with edit / regenerate / approve / reject per variant.
+**Phase 1 — Local MVP.** Stages 1–6 complete. The dashboard is the real dashboard now — moments grouped, tabs for the two variants, per-variant lifecycle (draft → approved / rejected → posted), per-variant edit and regenerate. Approved variants have a placeholder "Copy + Open" button awaiting Stage 7. Stage 7 next: copy to clipboard + open the platform's new-post page + capture the published URL.
 
 ---
 
@@ -34,6 +34,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 <!-- Reverse-chronological log. Append new bullets at the top with each user-visible change. Each bullet: YYYY-MM-DD — what shipped. -->
 
+- **2026-05-25** — Stage 6 shipped: real dashboard. Latest generation's moments grouped on the home page, tabs for X thread and Indie Hackers per moment, per-variant edit (inline textarea) / regenerate (single-variant Claude call, ~5–10s) / approve / reject / revert / restore. Approved variants show a disabled "Copy + Open" placeholder ready for Stage 7. Dashboard "Generate" button works the same as the debug page.
 - **2026-05-25** — Stage 5 shipped: Claude drafting via `tool_use` for guaranteed structured JSON output. System prompt + tool schema both cached with `cache_control: ephemeral` — second-call savings of ~90% on the cached portion. `/debug/draft` renders the latest generation's moments with both X-thread and Indie-Hackers-long variants. Also: inline note deletion (with confirm), elapsed-seconds counter on the generate button, and a `transaction()` helper in `db.ts` after hitting BIPS-L3 (node:sqlite has no `.transaction()` method).
 - **2026-05-25** — Stage 4 shipped: GitHub commit sync via Octokit's `paginate` helper. Last 7 days of commits per watched repo, cached in SQLite, idempotent re-runs thanks to a `(repo, sha)` UNIQUE constraint. Per-repo error handling (a 404 on one repo doesn't abort the whole sync). `/debug/commits` renders the cache with relative timestamps + short SHAs.
 - **2026-05-25** — Stage 3 shipped: Settings page with API-key status cards, inline "how to get this key" walk-throughs for Anthropic and GitHub, smoke-test buttons that hit each API for real, watched-repos multi-select fed by the user's GitHub repo list, and schedule + banned-words + style-notes preferences persisting to the `settings` table.
@@ -46,12 +47,12 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 **This week:**
 
-- Stage 6 — Full dashboard. Latest generation's moments grouped on the home page, both variants on tabs, edit / regenerate / approve / reject buttons per variant. Wire up the dashboard "Generate now" button (currently disabled).
-- Stage 7 — Copy + Open flow for X and Indie Hackers, with the "Did you publish it?" follow-up that captures the published URL.
+- Stage 7 — Copy + Open flow for X and Indie Hackers, with the "Did you publish it?" follow-up that captures the published URL and flips status from approved → posted.
+- Stage 8 — `/history` page with star/flop ratings. Starred posts feed back into future draft generations as voice examples.
 
 **Next week:**
 
-- Stage 8 — `/history` page with star/flop ratings. Starred posts feed back into future draft generations as voice examples.
+- Stage 9 — Scheduler (node-cron, Mondays 9am) + desktop notification on completion. "Last run / Next run" indicator in the header.
 
 ---
 

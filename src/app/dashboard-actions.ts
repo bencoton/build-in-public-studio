@@ -9,6 +9,7 @@ import {
 } from "@/lib/draft-mutations";
 import { regenerateDraft, type RegenerateResult } from "@/lib/claude-regenerate";
 import { generateDrafts, type GenerationResult } from "@/lib/claude";
+import { markDraftAsPosted } from "@/lib/posting";
 
 // ── Generic result types ─────────────────────────────────────────────────
 
@@ -63,6 +64,33 @@ export async function setDraftStatusAction(
 ): Promise<SimpleActionResult> {
   try {
     updateDraftStatus(draftId, status);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    return { ok: false, error: message };
+  }
+  revalidatePath("/");
+  return { ok: true };
+}
+
+// ── Mark a draft as posted (from the Copy + Open flow) ───────────────────
+
+export async function markPostedAction(
+  draftId: number,
+  postedUrl: string,
+): Promise<SimpleActionResult> {
+  // Light validation. We don't enforce a URL regex — the user might paste a
+  // shortlink or a slug, and being too strict here just frustrates them.
+  // We do check it starts with http(s):// so a typo doesn't silently save
+  // garbage.
+  const trimmed = postedUrl.trim();
+  if (!trimmed) {
+    return { ok: false, error: "URL cannot be empty." };
+  }
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return { ok: false, error: "URL should start with http:// or https://." };
+  }
+  try {
+    markDraftAsPosted(draftId, trimmed);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return { ok: false, error: message };
