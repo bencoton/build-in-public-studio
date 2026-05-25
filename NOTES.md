@@ -4,6 +4,17 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-05-25 — Stage 5 shipped
+
+- First end-to-end **"commits + notes → Claude → drafted moments"** call working. Sonnet via `@anthropic-ai/sdk`, `tool_use` for guaranteed structured output, `cache_control: ephemeral` on the system prompt and tool schema for ~90% cache savings on the repeat-call portion.
+- The cached system prompt encodes the voice rules — moments-not-commits, banned words, `[VERIFY]` markers, "beginner-learning is the angle not a weakness". The user-message holds the variable bits (this week's commits + notes + user's banned words from Settings + style notes). That split is what makes caching actually save anything.
+- Schema design follows the WyCo Tech-Stack lesson: `minItems: 0` on the moments array rather than `minItems: 3`, with the prompt encouraging 3-5. Over-constraining a tool schema is a known way to get empty arrays from Sonnet.
+- `/debug/draft` is the inspection view — like `/debug/commits`, intentionally unlinked. Stage 6 will turn the moment-rendering into the real dashboard.
+- **Bug hit during Stage 5 testing:** `db.transaction is not a function`. Caused by writing better-sqlite3-style code (muscle memory) on a `node:sqlite` database. Fixed with an explicit `transaction()` helper in `db.ts` using BEGIN/COMMIT/ROLLBACK. Captured as **BIPS-L3** in CLAUDE.md. Audit ran clean — no other `.transaction()` or `.pragma()` calls anywhere in the codebase. The whole loop closed in one round-trip instead of the usual 3-4.
+- **Feedback from first real use:** generation took 90s — longer than my "15-30s" estimate but inside the expected range for Sonnet emitting 3-4k output tokens. Worth noting because it set up the right expectation for Stage 6 (per-moment regenerates will be much faster — single variant, single moment, ~5-10s).
+- **Two small fixes shipped alongside Stage 5 in response to Ben's first-use feedback:** (a) inline trash button per note with `window.confirm` so notes can be deleted (was a real gap in Stage 2's notes page), (b) elapsed-seconds counter on the generate button so the 90s wait feels like progress rather than a frozen UI.
+- Commit hygiene note: we've drifted slightly from the "same commit as user-visible change" rule for PROJECT.md updates — instead doing a small docs-only follow-up commit per stage. Pragmatic for this session's pace; worth tightening if we ever revisit.
+
 ## 2026-05-25 — Stage 4 shipped
 
 - GitHub commit sync built on **Octokit** (the official SDK from GitHub). First "real outside data" stage. Pure-JS install, no Stage 2-style native-binding drama.
