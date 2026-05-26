@@ -14,9 +14,12 @@
 // public unauthenticated trigger for a paid Claude call.
 //
 // Runtime: Node, because Anthropic SDK + Octokit + postgres.js all need Node.
-// maxDuration: 60s is the Vercel hobby-tier cap. A cached run is ~5–10s, so
-// this should comfortably fit; if it ever times out, the most likely culprit
-// is a cold start + a busy week's worth of commits.
+// maxDuration: 300s (5 minutes) — the Vercel Pro-tier cap. Weekly crons are
+// always cache-miss runs (Anthropic's prompt cache has a ~5-minute TTL, so
+// nothing carries over week-to-week), and a cold Vercel container + Postgres
+// pool warm-up + Sonnet generating 3–5 moments × 2 drafts can stack to 60–120s.
+// Pro tier gives plenty of headroom; if we ever max out 300s we'd move to
+// Inngest or split into staged crons.
 
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
@@ -25,7 +28,7 @@ import { generateDrafts } from "@/lib/claude";
 import { setLastRunAt } from "@/lib/settings";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 // Cron triggers should always run fresh — never cache the response.
 export const dynamic = "force-dynamic";
 
