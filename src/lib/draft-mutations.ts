@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import sql from "./db";
 import type { DraftRow, MomentRow } from "./moments";
 
 export type DraftStatus = "draft" | "approved" | "posted" | "rejected";
@@ -19,11 +19,16 @@ export async function updateDraftContent(
   if (!trimmed) {
     throw new Error("Draft content cannot be empty.");
   }
-  const { error } = await supabase
-    .from("drafts")
-    .update({ content: trimmed, updated_at: new Date().toISOString() })
-    .eq("id", draftId);
-  if (error) throw new Error(`updateDraftContent(${draftId}): ${error.message}`);
+  try {
+    await sql`
+      UPDATE drafts
+      SET content = ${trimmed}, updated_at = now()
+      WHERE id = ${draftId}
+    `;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`updateDraftContent(${draftId}): ${msg}`);
+  }
 }
 
 /** Update a draft's status — used by approve / reject / revert flows. */
@@ -34,11 +39,16 @@ export async function updateDraftStatus(
   if (!VALID_STATUSES.includes(status)) {
     throw new Error(`Invalid status: ${status}`);
   }
-  const { error } = await supabase
-    .from("drafts")
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq("id", draftId);
-  if (error) throw new Error(`updateDraftStatus(${draftId}): ${error.message}`);
+  try {
+    await sql`
+      UPDATE drafts
+      SET status = ${status}, updated_at = now()
+      WHERE id = ${draftId}
+    `;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`updateDraftStatus(${draftId}): ${msg}`);
+  }
 }
 
 /**
@@ -46,32 +56,29 @@ export async function updateDraftStatus(
  * server action, which uses the moment's summary + source_refs to build the
  * Claude prompt.
  *
- * Two-query implementation rather than a FK-joined select because the typing
- * comes out cleaner — Supabase JS's auto-inferred nested-resource types can
- * be unstable across versions.
+ * Two-query implementation — keeps each row's typing simple.
  */
 export async function getDraftWithMoment(
   draftId: number,
 ): Promise<{ draft: DraftRow; moment: MomentRow } | null> {
-  const { data: draft, error: e1 } = await supabase
-    .from("drafts")
-    .select(
-      "id, moment_id, variant, content, status, rating, posted_url, posted_at, created_at, updated_at",
-    )
-    .eq("id", draftId)
-    .maybeSingle();
-  if (e1) throw new Error(`getDraftWithMoment (draft): ${e1.message}`);
+  const draftRows = await sql<DraftRow[]>`
+    SELECT id, moment_id, variant, content, status, rating,
+           posted_url, posted_at, created_at, updated_at
+    FROM drafts
+    WHERE id = ${draftId}
+    LIMIT 1
+  `;
+  const draft = draftRows[0];
   if (!draft) return null;
 
-  const { data: moment, error: e2 } = await supabase
-    .from("moments")
-    .select(
-      "id, summary, source_type, source_ref, generation_id, created_at, repo",
-    )
-    .eq("id", draft.moment_id)
-    .maybeSingle();
-  if (e2) throw new Error(`getDraftWithMoment (moment): ${e2.message}`);
+  const momentRows = await sql<MomentRow[]>`
+    SELECT id, summary, source_type, source_ref, generation_id, created_at, repo
+    FROM moments
+    WHERE id = ${draft.moment_id}
+    LIMIT 1
+  `;
+  const moment = momentRows[0];
   if (!moment) return null;
 
-  return { draft: draft as DraftRow, moment: moment as MomentRow };
+  return { draft: { ...draft }, moment: { ...moment } };
 }

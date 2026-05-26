@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import sql from "./db";
 
 export type CommitRow = {
   id: number;
@@ -6,8 +6,8 @@ export type CommitRow = {
   sha: string;
   message: string;
   files_changed: number | null;
-  committed_at: string;
-  synced_at: string;
+  committed_at: Date;
+  synced_at: Date;
 };
 
 /**
@@ -15,9 +15,8 @@ export type CommitRow = {
  * Returns true if a NEW row was inserted, false if the (repo, sha) pair was
  * already in the table.
  *
- * Implementation note: Supabase's upsert with `ignoreDuplicates: true` returns
- * inserted rows in the `.select()` payload — duplicates are silently skipped.
- * Counting the returned rows tells us whether anything actually changed.
+ * `ON CONFLICT DO NOTHING` + `RETURNING id` gives us a zero-row result on
+ * a duplicate and a one-row result on a fresh insert.
  */
 export async function upsertCommit(
   repo: string,
@@ -26,70 +25,58 @@ export async function upsertCommit(
   committedAt: string,
   filesChanged: number | null,
 ): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("commits")
-    .upsert(
-      {
-        repo,
-        sha,
-        message,
-        committed_at: committedAt,
-        files_changed: filesChanged,
-      },
-      { onConflict: "repo,sha", ignoreDuplicates: true },
-    )
-    .select("id");
-
-  if (error) throw new Error(`upsertCommit(${repo}, ${sha}): ${error.message}`);
-  return (data?.length ?? 0) > 0;
+  try {
+    const result = await sql<Array<{ id: number }>>`
+      INSERT INTO commits (repo, sha, message, committed_at, files_changed)
+      VALUES (${repo}, ${sha}, ${message}, ${committedAt}, ${filesChanged})
+      ON CONFLICT (repo, sha) DO NOTHING
+      RETURNING id
+    `;
+    return result.length > 0;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`upsertCommit(${repo}, ${sha}): ${msg}`);
+  }
 }
 
 /** Most recent N commits across all repos, newest first. */
 export async function getRecentCommits(limit = 200): Promise<CommitRow[]> {
   const safe = Math.min(Math.max(1, Math.floor(limit)), 1000);
 
-  const { data, error } = await supabase
-    .from("commits")
-    .select("id, repo, sha, message, files_changed, committed_at, synced_at")
-    .order("committed_at", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(safe);
-
-  if (error) throw new Error(`getRecentCommits: ${error.message}`);
-  return data ?? [];
+  const rows = await sql<CommitRow[]>`
+    SELECT id, repo, sha, message, files_changed, committed_at, synced_at
+    FROM commits
+    ORDER BY committed_at DESC, id DESC
+    LIMIT ${safe}
+  `;
+  return rows.map((r) => ({ ...r }));
 }
 
 /** Most recent sync timestamp (max of synced_at), or null if no commits cached. */
-export async function getLastSyncedAt(): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("commits")
-    .select("synced_at")
-    .order("synced_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw new Error(`getLastSyncedAt: ${error.message}`);
-  return data?.synced_at ?? null;
+export async function getLastSyncedAt(): Promise<Date | null> {
+  const rows = await sql<Array<{ synced_at: Date }>>`
+    SELECT synced_at
+    FROM commits
+    ORDER BY synced_at DESC
+    LIMIT 1
+  `;
+  return rows[0]?.synced_at ?? null;
 }
 
 /**
- * Per-repo commit counts. Client-side grouping rather than a Postgres
- * GROUP BY — at single-user scale (max a few hundred commits cached)
- * the data transfer is trivial. Avoids needing a Postgres view or RPC.
+ * Per-repo commit counts. SQL GROUP BY now — postgres.js makes a server-side
+ * aggregate just as easy as a client-side one.
  */
 export async function getCommitCountsByRepo(): Promise<
   Array<{ repo: string; count: number }>
 > {
-  const { data, error } = await supabase.from("commits").select("repo");
-  if (error) throw new Error(`getCommitCountsByRepo: ${error.message}`);
-
-  const map = new Map<string, number>();
-  for (const row of data ?? []) {
-    map.set(row.repo, (map.get(row.repo) ?? 0) + 1);
-  }
-  return Array.from(map.entries())
-    .map(([repo, count]) => ({ repo, count }))
-    .sort((a, b) => a.repo.localeCompare(b.repo));
+  const rows = await sql<Array<{ repo: string; count: number }>>`
+    SELECT repo, COUNT(*)::int AS count
+    FROM commits
+    GROUP BY repo
+    ORDER BY repo ASC
+  `;
+  return rows.map((r) => ({ ...r }));
 }
 
 /**
@@ -101,12 +88,10 @@ export async function getReposForShaPrefix(prefix: string): Promise<string[]> {
   // Postgres LIKE is case-sensitive. GitHub returns lowercase SHAs so we
   // normalise the prefix to lowercase before matching.
   const lower = prefix.toLowerCase();
-  const { data, error } = await supabase
-    .from("commits")
-    .select("repo")
-    .like("sha", `${lower}%`);
-
-  if (error) throw new Error(`getReposForShaPrefix(${prefix}): ${error.message}`);
-  // Dedupe client-side — supabase-js doesn't expose a DISTINCT modifier.
-  return Array.from(new Set((data ?? []).map((r) => r.repo)));
+  const rows = await sql<Array<{ repo: string }>>`
+    SELECT DISTINCT repo
+    FROM commits
+    WHERE sha LIKE ${lower + "%"}
+  `;
+  return rows.map((r) => r.repo);
 }

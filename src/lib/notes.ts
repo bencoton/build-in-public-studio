@@ -1,12 +1,11 @@
-import { supabase } from "./supabase";
+import sql from "./db";
 
 // Row shape as we expose it to the rest of the app. Mirrors the Postgres
-// `notes` table columns plus the convention that `created_at` comes back as
-// an ISO 8601 string from Supabase (timestamptz → JSON serialised by PostgREST).
+// `notes` table columns. postgres.js returns timestamptz as native Date.
 export type NoteRow = {
   id: number;
   content: string;
-  created_at: string;
+  created_at: Date;
   repo: string | null;
 };
 
@@ -26,15 +25,21 @@ export async function addNote(
   }
   const cleanRepo = repo && repo.trim().length > 0 ? repo.trim() : null;
 
-  const { data, error } = await supabase
-    .from("notes")
-    .insert({ content: trimmed, repo: cleanRepo })
-    .select("id, content, created_at, repo")
-    .single();
-
-  if (error) throw new Error(`addNote: ${error.message}`);
-  if (!data) throw new Error("addNote: insert returned no row");
-  return data;
+  try {
+    const rows = await sql<NoteRow[]>`
+      INSERT INTO notes (content, repo)
+      VALUES (${trimmed}, ${cleanRepo})
+      RETURNING id, content, created_at, repo
+    `;
+    if (rows.length === 0) {
+      throw new Error("addNote: insert returned no row");
+    }
+    return { ...rows[0] };
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("addNote:")) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`addNote: ${msg}`);
+  }
 }
 
 /**
@@ -43,27 +48,24 @@ export async function addNote(
 export async function getRecentNotes(limit = 50): Promise<NoteRow[]> {
   const safeLimit = Math.min(Math.max(1, Math.floor(limit)), 200);
 
-  const { data, error } = await supabase
-    .from("notes")
-    .select("id, content, created_at, repo")
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(safeLimit);
-
-  if (error) throw new Error(`getRecentNotes: ${error.message}`);
-  return data ?? [];
+  const rows = await sql<NoteRow[]>`
+    SELECT id, content, created_at, repo
+    FROM notes
+    ORDER BY created_at DESC, id DESC
+    LIMIT ${safeLimit}
+  `;
+  return rows.map((r) => ({ ...r }));
 }
 
 /** Look up a single note by id, or null if not found. */
 export async function getNoteById(id: number): Promise<NoteRow | null> {
-  const { data, error } = await supabase
-    .from("notes")
-    .select("id, content, created_at, repo")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (error) throw new Error(`getNoteById(${id}): ${error.message}`);
-  return data ?? null;
+  const rows = await sql<NoteRow[]>`
+    SELECT id, content, created_at, repo
+    FROM notes
+    WHERE id = ${id}
+    LIMIT 1
+  `;
+  return rows[0] ? { ...rows[0] } : null;
 }
 
 /**
@@ -71,11 +73,13 @@ export async function getNoteById(id: number): Promise<NoteRow | null> {
  * matched (silent no-op rather than throw).
  */
 export async function deleteNote(id: number): Promise<boolean> {
-  const { error, count } = await supabase
-    .from("notes")
-    .delete({ count: "exact" })
-    .eq("id", id);
-
-  if (error) throw new Error(`deleteNote(${id}): ${error.message}`);
-  return (count ?? 0) > 0;
+  try {
+    const result = await sql<Array<{ id: number }>>`
+      DELETE FROM notes WHERE id = ${id} RETURNING id
+    `;
+    return result.length > 0;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`deleteNote(${id}): ${msg}`);
+  }
 }

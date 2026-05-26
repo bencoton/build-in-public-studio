@@ -1,38 +1,44 @@
-import { supabase } from "./supabase";
+import sql from "./db";
 
 /*
-  Key-value settings, backed by Supabase. Used for:
+  Key-value settings, backed by Postgres. Used for:
     - watched_repos    (JSON string-array of "owner/repo")
     - schedule_cron    (the user's cron expression)
     - banned_words     (newline-separated list)
     - style_notes      (free-form text baked into the Claude prompt)
     - last_run_at      (ISO timestamp of the most recent successful generation)
 
-  All exported functions are async (Supabase calls return Promises). Callers
-  in server actions and server components need to await them.
+  All exported functions are async. Callers in server actions and server
+  components need to await them.
 */
 
 /** Read a single setting value, or undefined if not set. */
 export async function getSetting(key: string): Promise<string | undefined> {
-  const { data, error } = await supabase
-    .from("settings")
-    .select("value")
-    .eq("key", key)
-    .maybeSingle();
-  if (error) throw new Error(`getSetting(${key}): ${error.message}`);
-  return data?.value ?? undefined;
+  try {
+    const rows = await sql<Array<{ value: string }>>`
+      SELECT value FROM settings WHERE key = ${key} LIMIT 1
+    `;
+    return rows[0]?.value;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`getSetting(${key}): ${msg}`);
+  }
 }
 
 /** Upsert a setting. Bumps updated_at explicitly because Postgres's
  *  DEFAULT now() only fires on INSERT, not on the UPDATE half of an upsert. */
 export async function setSetting(key: string, value: string): Promise<void> {
-  const { error } = await supabase
-    .from("settings")
-    .upsert(
-      { key, value, updated_at: new Date().toISOString() },
-      { onConflict: "key" },
-    );
-  if (error) throw new Error(`setSetting(${key}): ${error.message}`);
+  try {
+    await sql`
+      INSERT INTO settings (key, value, updated_at)
+      VALUES (${key}, ${value}, now())
+      ON CONFLICT (key) DO UPDATE
+        SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+    `;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`setSetting(${key}): ${msg}`);
+  }
 }
 
 // ── Typed convenience wrappers ─────────────────────────────────────────────

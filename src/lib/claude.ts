@@ -11,7 +11,6 @@ import {
 } from "./commits";
 import { insertMomentWithDrafts } from "./moments";
 import { getStarredExamples, type HistoryDraft } from "./history";
-import { parseTimestamp } from "./format";
 import { DRAFT_SYSTEM_PROMPT } from "@/prompts/draft-system";
 
 /*
@@ -116,10 +115,10 @@ export async function generateDrafts(): Promise<GenerationResult> {
   // Note: voiceExamples and insertMomentWithDrafts are still sync — they're
   // ported in Stage 9b.2 round 3.
   const allCommits = await getRecentCommits(500);
-  const commits = allCommits.filter((c) => new Date(c.committed_at) >= cutoff);
+  const commits = allCommits.filter((c) => c.committed_at >= cutoff);
 
   const allNotes = await getRecentNotes(200);
-  const notes = allNotes.filter((n) => parseTimestamp(n.created_at) >= cutoff);
+  const notes = allNotes.filter((n) => n.created_at >= cutoff);
 
   if (commits.length === 0 && notes.length === 0) {
     throw new Error(
@@ -225,7 +224,7 @@ function buildUserMessage(args: {
     parts.push("## Commits (last 7 days, newest first)\n");
     for (const c of args.commits) {
       parts.push(
-        `- ${c.repo} \`${c.sha.slice(0, 7)}\` (${c.committed_at}) — ${firstLine(c.message)}`,
+        `- ${c.repo} \`${c.sha.slice(0, 7)}\` (${c.committed_at.toISOString()}) — ${firstLine(c.message)}`,
       );
     }
     parts.push("");
@@ -236,7 +235,7 @@ function buildUserMessage(args: {
   if (args.notes.length > 0) {
     parts.push("## Notes (last 7 days, newest first)\n");
     for (const n of args.notes) {
-      parts.push(`### Note ${n.id} (${n.created_at})\n${n.content}\n`);
+      parts.push(`### Note ${n.id} (${n.created_at.toISOString()})\n${n.content}\n`);
     }
   } else {
     parts.push("## Notes\n\nNo notes in the last 7 days.\n");

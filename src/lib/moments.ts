@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import sql from "./db";
 
 export type MomentRow = {
   id: number;
@@ -6,7 +6,7 @@ export type MomentRow = {
   source_type: string; // 'commit' | 'note' | 'mixed' (constrained by Claude, not the DB)
   source_ref: unknown; // jsonb — typically string[] | null; Claude guarantees the shape
   generation_id: string;
-  created_at: string;
+  created_at: Date;
   repo: string | null;
 };
 
@@ -18,9 +18,9 @@ export type DraftRow = {
   status: "draft" | "approved" | "posted" | "rejected";
   rating: "star" | "flop" | "neutral" | null;
   posted_url: string | null;
-  posted_at: string | null;
-  created_at: string;
-  updated_at: string;
+  posted_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
 };
 
 export type MomentWithDrafts = MomentRow & {
@@ -30,9 +30,9 @@ export type MomentWithDrafts = MomentRow & {
 
 /**
  * Insert a moment along with its two draft variants. Uses the Postgres RPC
- * function `insert_moment_with_drafts` (defined in migration 20260525180000)
- * to wrap the multi-row insert in a real ACID transaction — what we used to
- * get from db.transaction() under node:sqlite.
+ * function `insert_moment_with_drafts` (defined in migration 0002) to wrap
+ * the multi-row insert in a real ACID transaction — what we used to get from
+ * db.transaction() under node:sqlite.
  *
  * Returns the new moment's id.
  */
@@ -45,65 +45,70 @@ export async function insertMomentWithDrafts(args: {
   ihLong: string;
   repo: string | null;
 }): Promise<number> {
-  const { data, error } = await supabase.rpc("insert_moment_with_drafts", {
-    p_summary: args.summary,
-    p_source_type: args.sourceType,
-    p_source_refs: args.sourceRefs,
-    p_generation_id: args.generationId,
-    p_repo: args.repo,
-    p_x_thread: args.xThread,
-    p_ih_long: args.ihLong,
-  });
-  if (error) throw new Error(`insertMomentWithDrafts: ${error.message}`);
-  if (data === null || data === undefined) {
+  const result = await sql<Array<{ id: number | null }>>`
+    SELECT insert_moment_with_drafts(
+      ${args.summary},
+      ${args.sourceType},
+      ${JSON.stringify(args.sourceRefs)}::jsonb,
+      ${args.generationId},
+      ${args.repo},
+      ${args.xThread},
+      ${args.ihLong}
+    ) AS id
+  `;
+  const id = result[0]?.id;
+  if (id === null || id === undefined) {
     throw new Error("insertMomentWithDrafts: RPC returned no id");
   }
-  // bigint from Postgres may come through as number or string depending on
-  // the client version. Normalise via Number().
-  return Number(data);
+  return Number(id);
 }
 
 /** All moments in the most recent generation, with their drafts attached. */
 export async function getLatestGeneration(): Promise<MomentWithDrafts[]> {
   // Step 1: find the most recent generation_id.
-  const { data: latest, error: e1 } = await supabase
-    .from("moments")
-    .select("generation_id")
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (e1) throw new Error(`getLatestGeneration (find latest): ${e1.message}`);
-  if (!latest) return [];
-
-  return getMomentsByGeneration(latest.generation_id);
+  const latest = await sql<Array<{ generation_id: string }>>`
+    SELECT generation_id
+    FROM moments
+    ORDER BY created_at DESC, id DESC
+    LIMIT 1
+  `;
+  if (latest.length === 0) return [];
+  return getMomentsByGeneration(latest[0].generation_id);
 }
 
 /**
  * Fetch all moments with a given generation_id, plus their drafts as nested
- * objects (via PostgREST's FK-join select syntax). Each moment row comes back
- * with a `drafts` array embedded.
+ * objects. We do this as two queries (moments, then drafts for those moment
+ * ids) and stitch in JS — keeps the typing simple and avoids JSON aggregation.
  */
 export async function getMomentsByGeneration(
   generationId: string,
 ): Promise<MomentWithDrafts[]> {
-  const { data, error } = await supabase
-    .from("moments")
-    .select(
-      `id, summary, source_type, source_ref, generation_id, created_at, repo,
-       drafts (
-         id, moment_id, variant, content, status, rating,
-         posted_url, posted_at, created_at, updated_at
-       )`,
-    )
-    .eq("generation_id", generationId)
-    .order("id", { ascending: true });
+  const moments = await sql<MomentRow[]>`
+    SELECT id, summary, source_type, source_ref, generation_id, created_at, repo
+    FROM moments
+    WHERE generation_id = ${generationId}
+    ORDER BY id ASC
+  `;
+  if (moments.length === 0) return [];
 
-  if (error) throw new Error(`getMomentsByGeneration: ${error.message}`);
+  const momentIds = moments.map((m) => m.id);
+  const drafts = await sql<DraftRow[]>`
+    SELECT id, moment_id, variant, content, status, rating,
+           posted_url, posted_at, created_at, updated_at
+    FROM drafts
+    WHERE moment_id IN ${sql(momentIds)}
+  `;
 
-  return (data ?? []).map((m) => {
-    // source_ref is jsonb — Supabase parses it for us, so no JSON.parse needed
-    // (unlike under node:sqlite where it came back as a string).
+  // Group drafts by moment_id.
+  const byMoment = new Map<number, DraftRow[]>();
+  for (const d of drafts) {
+    const arr = byMoment.get(d.moment_id) ?? [];
+    arr.push(d);
+    byMoment.set(d.moment_id, arr);
+  }
+
+  return moments.map((m) => {
     let sourceRefs: string[] = [];
     if (Array.isArray(m.source_ref)) {
       sourceRefs = m.source_ref.filter(
@@ -111,20 +116,14 @@ export async function getMomentsByGeneration(
       );
     }
     // Sort drafts deterministically so the X / IH tabs always render in the
-    // same order. ih_long < x_thread alphabetically — matches the SQLite ORDER BY.
-    const sortedDrafts = (m.drafts ?? []).sort((a, b) =>
+    // same order. ih_long < x_thread alphabetically.
+    const sortedDrafts = (byMoment.get(m.id) ?? []).sort((a, b) =>
       a.variant.localeCompare(b.variant),
     );
     return {
-      id: m.id,
-      summary: m.summary,
-      source_type: m.source_type,
-      source_ref: m.source_ref,
-      generation_id: m.generation_id,
-      created_at: m.created_at,
-      repo: m.repo,
+      ...m,
       source_refs: sourceRefs,
-      drafts: sortedDrafts as DraftRow[],
+      drafts: sortedDrafts,
     };
   });
 }

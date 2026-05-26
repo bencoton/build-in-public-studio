@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import sql from "./db";
 
 /**
  * Mark a draft as posted: save the URL, set the timestamp, flip status to
@@ -16,15 +16,17 @@ export async function markDraftAsPosted(
   if (trimmed.length > 2000) {
     throw new Error("Posted URL is too long.");
   }
-  const now = new Date().toISOString();
-  const { error } = await supabase
-    .from("drafts")
-    .update({
-      status: "posted",
-      posted_url: trimmed,
-      posted_at: now,
-      updated_at: now,
-    })
-    .eq("id", draftId);
-  if (error) throw new Error(`markDraftAsPosted(${draftId}): ${error.message}`);
+  try {
+    await sql`
+      UPDATE drafts
+      SET status = 'posted',
+          posted_url = ${trimmed},
+          posted_at = now(),
+          updated_at = now()
+      WHERE id = ${draftId}
+    `;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`markDraftAsPosted(${draftId}): ${msg}`);
+  }
 }
