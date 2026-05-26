@@ -41,3 +41,6 @@ next-env.d.ts
 *.sqlite-journal
 *.sqlite-wal
 *.sqlite-shm
+
+# migration backups — schema/data dumps may contain personal info, never commit
+migration-backups/
