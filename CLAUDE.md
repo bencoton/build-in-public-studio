@@ -16,7 +16,7 @@ Ben. Beginner-leaning developer. Backend / scripting experience; mobile is newer
 
 ## Project basics
 
-- **Stack:** Web — Next.js 14 (App Router) + TypeScript + Tailwind. **Deliberate deviation from the standard WyCo stack:** no Supabase, no Vercel for the local app. Storage is `better-sqlite3` (a single `.sqlite` file in the project root). All API calls run locally from the user's machine using their own keys. The hosted SaaS version (if it happens) would adopt the standard WyCo stack — see `docs/PLAN.md` Phase 2.
+- **Stack:** Web — Next.js 14 (App Router) + TypeScript + Tailwind. Postgres via Neon (`postgres.js` client, pooled connection, `prepare: false` for the transaction-mode pooler). Deployed to Vercel with Anthropic + GitHub API keys as env vars. Migrated from `better-sqlite3` → Supabase → Neon over Stages 9b.1–9b.3; see Migration-Runbook.md Part 2.1 in the WoW folder for context.
 - **Default UI theme:** dark, with a light toggle (the toggle ships in Stage 10 — until then, dark only).
 - **Accent colour:** Teal — the parent WyCo brand primary (`#14b8a6`). Build-in-Public Studio is positioned as a meta-tool in the WyCo family, not a separate product, so it borrows the parent brand colour rather than claiming a new slot in the product-family table.
 - **Audience:** solo devs and indie hackers shipping in public. Public from day one.

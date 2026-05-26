@@ -392,6 +392,8 @@ Two outputs from every non-trivial diagnosis:
 
 *Format: short title, symptom, root cause, fix recipe, detection signature. Append new lessons as you diagnose new bug classes. **Never delete** — even retired lessons stay as historical context.*
 
+> **Supabase-era marker.** Lessons tagged **[SUPABASE ERA]** below were learned while running on Supabase before the 2026-05-26 stack migration (see [`decisions/ADR-001-supabase-to-neon.md`](./decisions/ADR-001-supabase-to-neon.md)). They are preserved for projects still mid-migration and for the historical record. New projects starting on the Neon + Better Auth + R2 stack will not encounter most of these — but the underlying Postgres lessons (L1, L6, L7) still apply.
+
 ### L1 — Helper functions must be defined after the tables they query
 
 - **Symptom:** Migration script aborts at a `CREATE FUNCTION` or `CREATE POLICY` line with a "relation … does not exist" error, even though the table is also being created in the same script.
@@ -406,14 +408,14 @@ Two outputs from every non-trivial diagnosis:
 - **Fix recipe:** For byte-clean stdout-only redirection on Windows, wrap the command: `cmd /c "supabase gen types typescript --linked > src/types/database.ts"`. If you must stay in PowerShell, pipe through `| Out-File -Encoding utf8 -FilePath path\to\file` instead of using `>`.
 - **Detection signature:** The first byte of the generated file is `0xFF 0xFE` (UTF-16 BOM) instead of normal ASCII, or the file contains lines like "Connecting to remote database…" that were meant to be log output.
 
-### L3 — `supabase link` writes state into the current folder — always run it from the project root
+### L3 — `supabase link` writes state into the current folder — always run it from the project root  **[SUPABASE ERA]**
 
 - **Symptom:** `supabase` CLI commands behave as if no project is linked, or link state (a `supabase/` folder, `.temp` files, generated types) ends up somewhere unexpected like `C:\Users\benco\`.
 - **Root cause:** `supabase link` creates and reads its config relative to the current working directory.
 - **Fix recipe:** Always `cd` to the project root before running any `supabase` command. Verify with `pwd`. To clean up a stray link: delete the misplaced `supabase/` folder, `cd` to the real project root, then re-run `supabase link --project-ref <ref>`.
 - **Detection signature:** `supabase status` says "no project linked" despite a recent `link` command, OR you find a `supabase/` folder in your user-home directory that you did not put there.
 
-### L4 — Supabase web SQL editor's "Explain" toggle rejects DO blocks
+### L4 — Supabase web SQL editor's "Explain" toggle rejects DO blocks  **[SUPABASE ERA]**
 
 - **Symptom:** A `DO $$ … $$;` block runs cleanly in `psql` or as a migration file, but pasting the exact same SQL into the Supabase dashboard's SQL editor produces a confusing syntax-like error.
 - **Root cause:** The "Explain" toggle wraps your query in `EXPLAIN ANALYZE` before sending it. `EXPLAIN` cannot be applied to a DO block.
@@ -424,4 +426,192 @@ Two outputs from every non-trivial diagnosis:
 
 This lesson originally captured the friction of a two-folder setup (Cowork in a separate docs folder, Claude Code in the code folder). On 2026-05-16 the docs were merged into the project's `docs/` folder so both tools share one project root. The friction is gone; the lesson is retired. **If you find yourself referencing AGENTS.md or a separate docs folder, you are reading an old prompt — `CLAUDE.md` at the project root is now the single source of truth.**
 
-### L6 — plpgsql `array || element` is ambiguous on empty arrays 
+### L6 — plpgsql `array || element` is ambiguous on empty arrays — use `array_append`
+
+- **Symptom:** A plpgsql DO block that builds up a text array by appending elements one at a time fails at runtime with `ERROR: 22P02: malformed array literal: "<your value>"` and `DETAIL: Array value must start with "{" or dimension information.` The query line shown is something like `v_arr := v_arr || 'somevalue'`.
+- **Root cause:** When the left operand of `||` is an empty array (or an array variable that the planner cannot pin to a concrete element type), Postgres reinterprets the right-hand string as an *array literal* rather than a single element.
+- **Fix recipe:** Use `array_append(arr, val)` instead of `arr || val` whenever building an array incrementally in plpgsql. Alternatively, build the array in a single `ARRAY(SELECT ...)` expression.
+- **Detection signature:** `22P02 malformed array literal` raised inside a plpgsql block, with the offending line being a `||` append against a recently-declared or `ARRAY[]::text[]` variable.
+
+### L7 — Partial unique indexes need to be cleared before re-asserting
+
+- **Symptom:** A multi-row update that reassigns "which row is the chosen one" (e.g. flipping `is_primary` across photos, marking a new default address) fails with `duplicate key value violates unique constraint "<name>"` on the very first row.
+- **Root cause:** Partial unique indexes — `UNIQUE (<scope>) WHERE <flag>` — enforce "at most one true per scope" *at every statement boundary*, not just at transaction commit.
+- **Fix recipe:** Clear the flag on the existing holder first (`UPDATE ... SET flag=false WHERE scope=X AND flag=true`), then run the per-row updates. Alternatively, a single transactional `UPDATE ... SET flag = (id = $newId) WHERE scope = X` re-asserts the whole set atomically.
+- **Detection signature:** `23505 duplicate key value violates unique constraint "<name>_one_<flag>_per_<scope>"` raised on the *first* iteration of a loop reshuffling a chosen-one flag.
+
+### L8 — Windows partial-write corruption: trailing NUL bytes and mid-content truncation
+
+- **Symptom:** After what looked like a normal session, multiple TypeScript/TSX files in the working tree are "modified" relative to HEAD even though no edit happened. Two flavours: (a) a small file shows up as `Bin` in `git diff --stat` despite being plain text, and tsc reports `TS1127: Invalid character` at a column far past the end of the visible content; (b) a file is mostly *deletions* in the diff and ends mid-syntax — unclosed JSX tag, unterminated template literal.
+- **Root cause:** A Windows file-write did not complete cleanly — Cowork's bridge, an editor, or another process opened the file, wrote less than the full new content, and either (a) left the old tail behind as NUL bytes padding the file out to its previous length, or (b) truncated the file mid-write.
+- **Fix recipe:**
+  1. Confirm the diagnosis. From a bash that can read the bytes, run `find src -name "*.ts*" -exec sh -c 'tr -d -c "\000" < "$1" | wc -c | xargs -I{} sh -c "[ {} -gt 0 ] && echo CORRUPT {} NULs $1"' _ {} \;` — any non-zero output is a NUL-padded file.
+  2. Do not try to recover content from the working tree — `HEAD` is the source of truth. If the corruption is only on uncommitted files, `git restore .` is the safe move. If that fails with `Operation not permitted`, overwrite each file by piping `git show HEAD:<path>` straight back into the file from Python's `open('wb')` (atomic).
+  3. Re-run `npx tsc --noEmit` and `npm run lint`. Both should be clean before going near a commit.
+- **Detection signature:** Three signals together: `git diff --stat` shows `Bin N -> M bytes` for a file `file` says is `ASCII text`; `tr -d -c '\000' < file | wc -c` returns non-zero; lint or tsc errors are about *structure* (missing brackets, unterminated literals) rather than logic.
+
+### L9 — Migration history skew: `db push` errors with `relation already exists`  **[SUPABASE ERA]**
+
+- **Symptom:** Running `supabase db push` fails with `ERROR: relation "<existing_table>" already exists (SQLSTATE 42P07)` on a `CREATE TABLE` line from an EARLIER migration file. The table that "already exists" is one you know was created by a migration that has been live on prod for ages.
+- **Root cause:** Supabase tracks applied migrations via `supabase_migrations.schema_migrations` on the remote DB. If a past migration was applied OUTSIDE `db push` — e.g. pasted into the dashboard SQL editor — the schema exists on prod but the registry has no row for it.
+- **Fix recipe:**
+  1. **Verify the prod schema actually matches your local file before touching the registry.** In the Supabase SQL editor (L4 — Explain OFF), compare columns and policies. If prod diverges, STOP — write an alignment migration first.
+  2. If schemas match exactly: `npx supabase migration repair --status applied <NNNN>` where NNNN is the migration number. Only inserts a registry row; does not touch the schema.
+  3. Verify: `npx supabase migration list`. Local and Remote columns should now line up.
+  4. Re-run `npx supabase db push` — the new migration will apply cleanly.
+- **Detection signature:** `db push` errors with `relation X already exists` AND the failing `CREATE TABLE` is in a migration file with a number LESS THAN the one you are currently adding.
+
+### L10 — Functional setState + synchronous event access = page-crashing TypeError
+
+- **Symptom:** A controlled `<input>`, `<textarea>`, or `<select>` causes the page to crash on the first keystroke with `Uncaught TypeError: Cannot read properties of null (reading 'value')`. Stack trace passes through React internals.
+- **Root cause:** The onChange handler accesses `e.currentTarget.value` *inside* the functional setState updater callback — e.g. `onChange={(e) => setX((cur) => ({...cur, k: e.currentTarget.value}))}`. React 19 calls the updater asynchronously, after the synchronous event handler has returned. By that time, React has nulled `e.currentTarget`.
+- **Fix recipe:** Extract the value to a local variable BEFORE the setState call.
+
+  ```js
+  onChange={(e) => {
+    const value = e.currentTarget.value;
+    setX((cur) => ({ ...cur, k: value }));
+  }}
+  ```
+
+- **When the antipattern is SAFE:** the bug only fires when the event is accessed *inside* the functional updater. Non-functional setState (`setX({ ...x, k: e.currentTarget.value })`) and pure function calls (`onChange={(e) => doThing(e.currentTarget.value)}`) are safe.
+- **Detection signature:** (a) error is `Cannot read properties of null (reading 'value')`; (b) stack trace passes through React's useState/dispatcher; (c) the offending handler reads `e.currentTarget` or `e.target` *inside* a functional setState updater `(cur) => ...`.
+
+### L11 — RLS-enabled table with only a SELECT policy silently rejects all writes  **[SUPABASE ERA]**
+
+- **Symptom:** Code writes to a Supabase table from a user-JWT-scoped client. The call returns no error (`error` is `null`), but no rows land. Manually inserting via the SQL editor (service-role) works — misleading.
+- **Root cause:** The table has `enable row level security` ON but no `INSERT` policy. PostgreSQL RLS default-denies any operation with no permissive policy. supabase-js does not distinguish "constraint violation" from "RLS denied" — the response is `data: [], error: null`.
+- **Fix recipe:**
+  1. **Audit policies on the table.** `SELECT policyname, cmd, qual, with_check FROM pg_policies WHERE schemaname = 'public' AND tablename = '<table>';`. If there is no row with `cmd = 'INSERT'` (or `'ALL'`), that is the bug.
+  2. **Add the missing policy.** For a shared-cache table where any authenticated user may contribute: `create policy "authenticated insert <table>" on public.<table> for insert to authenticated with check (true);`. For org-scoped tables, predicate on `current_org_id()`.
+  3. **Stop discarding the write result.** Any `.insert(...)` / `.update(...)` / `.delete(...)` that ignores the returned `error` is masking exactly this class of bug. Log on error with a greppable prefix.
+- **Detection signature:** Three things together: supabase-js call's `error` is null but the expected row is not queryable afterwards; `select count(*) from <table>` does not tick up; `pg_policies` for that table has no INSERT row.
+
+### L12 — Verify source data before designing a fallback chain
+
+- **Symptom:** A complex multi-tier fallback (AI estimation, secondary API, regex extraction) gets built to handle a "missing" field. Days later, an audit shows the field was actually present in the original response — under a different name, in a sub-object, or as separate parts (e.g. `outcode` + `incode`).
+- **Root cause:** Skipping the pre-flight audit of the upstream source. Designing infrastructure for a problem you have not confirmed.
+- **Fix recipe:** Before designing any cascade tier, AI-tier estimator, secondary API integration, or regex-on-description extractor — pause and:
+  1. Call the source API on a representative input and dump the raw response shape to a log line or a one-off audit endpoint.
+  2. Confirm in writing (PR description, notes file, commit message) which fields are present, which are absent, which are nested differently, and which are non-deterministic.
+  3. Identify whether the "missing" field is actually present under a different name, in a sub-object, as separate parts, in description text, or in a sibling endpoint.
+  4. Only after steps 1-3 design the fallback chain — the first tier should be "extract from the audited response correctly", not "call a secondary API".
+- **Detection signature:** You are about to write an "AI estimator" or "secondary API integration" for a field. Stop. Have you run the audit endpoint on the upstream source first?
+- **Cost of skipping:** roughly one to three days of engineering on infrastructure that gets ripped out when the audit is finally run.
+
+### L13 — Server-to-server Edge Function calls need `--no-verify-jwt` + manual apikey check  **[SUPABASE ERA]**
+
+- **Symptom:** A function dispatched from another function (server-to-server) is rejected at the routing/proxy layer with a 401 before any application code runs. Server logs show zero entries from the function itself.
+- **Root cause:** Default Supabase Edge Function JWT verification rejects `sb_secret_*` service-role keys (they are not JWTs). The request never reaches your function.
+- **Fix recipe:** Deploy the callee function with `--no-verify-jwt`. Inside the function, add a manual apikey check at the top: compare `req.headers.get('apikey')` against `Deno.env.get('<service_role_env_var>')`. Reject with 401 if it does not match.
+- **Detection signature:** Routing-layer 401 with zero application-level logs from the function. Combined with confirming the function IS deployed (`supabase functions list`).
+- **Audit:** Once you find one, grep for all server-to-server function calls — most likely some others have the same pattern.
+
+### L14 — Cross-project stack migrations follow a documented playbook, not improvisation
+
+- **Symptom:** Mid-migration on project N, you cannot remember whether project N-1 used `pg` or `postgres.js` as the DB client, or how its Better Auth schema was generated, or which env var name was canonical. You make a slightly different choice each time, and now four projects have four subtly different setups.
+- **Root cause:** Treating each migration as a one-off rather than as an instance of a documented playbook. Lessons from project 1 do not flow into project 2.
+- **Fix recipe:**
+  1. The first time you do a stack migration across multiple projects, write `Migration-Runbook.md` in the `Ways of Working` folder — Part 1 is the common steps, Part 2.<n> is per-project.
+  2. Every Cowork session during a migration starts with re-reading the relevant section of the runbook.
+  3. Every Claude Code session in a migrating project has CLAUDE.md pointed at the runbook so the AI gets the same playbook.
+  4. After each project's migration, write the lessons learnt into that project's appendix BEFORE starting the next project.
+  5. Promote universal lessons (the ones that apply to every project) into Part 9 here as new L<n> entries.
+- **Detection signature:** Two projects on the same "new stack" have meaningfully different shapes — different env var names, different DB client libraries, different auth wrappers — for no project-specific reason.
+- **Reference:** [`Migration-Runbook.md`](./Migration-Runbook.md), the canonical playbook for the 2026-05-26 Supabase → Neon migration.
+
+---
+
+## Part 10 — End-of-session checklist
+
+1. All planned tasks are either done or explicitly carried over.
+2. `npm run lint` and `npm run typecheck` (or equivalent) pass.
+3. Every commit is pushed; the deploy is green.
+4. `NOTES.md` has a new entry summarising what changed and what is next.
+5. `KNOWN-ISSUES.md` reflects any new bugs found or fixed.
+6. If a new architectural rule was learned this session, it was added to `CLAUDE.md` AND to Part 9 above.
+
+---
+
+## Part 11 — Code style defaults
+
+(Pulled into the project's `CLAUDE.md` so Claude Code applies them without re-asking.)
+
+- **TypeScript strict mode.** No `any` unless commented with a reason.
+- **Functional React components.** Hooks. No class components.
+- **Styling:** Tailwind (web) / NativeWind (RN). Avoid inline styles unless dynamic.
+- **File names:** `kebab-case.tsx` for components, `camelCase.ts` for utilities, `PascalCase` for type names.
+- **Exports:** prefer named exports. One main exported component per file.
+- **Dates:** `date-fns` with UK locale.
+- **Currency:** GBP with thousands separators.
+- **Error handling:** every async function has try/catch and surfaces a user-readable message. Never swallow errors.
+- **Visual design:** follow [`WYCO-DIGITAL-STYLE-GUIDE.md`](./WYCO-DIGITAL-STYLE-GUIDE.md) for colours, typography, component patterns, and brand voice.
+
+---
+
+## Part 12 — Testing and verification habits
+
+- Every feature ships with at least one quick end-to-end test against a real input (an example property, a real email, a real listing URL).
+- Run `npm run lint` and `npm run typecheck` before committing. Both must pass.
+- After a schema or prompt change, re-run the affected workflow against a representative input and inspect the raw output before declaring it "stable".
+- Detect silent failure modes (e.g. truncated AI output, swallowed errors) and surface them to the user — never let a partial result pretend to be a successful one.
+
+---
+
+---
+
+## Part 13 — Cross-project structure (for AI-driven social updates)
+
+This part explains how the projects under `C:\Users\benco\code\` are arranged so that a single AI agent (typically Cowork) can walk every project and produce **mid-week** and **end-of-week** social-media updates without me re-explaining each project from scratch.
+
+### The shape of the problem
+
+Ben runs a portfolio of products in the WyCo family (WyCo Digital, WyCo Trace, Stashery, ReConfig, the upcoming irrigation app, the upcoming NFC app — see [`WYCO-DIGITAL-STYLE-GUIDE.md`](./WYCO-DIGITAL-STYLE-GUIDE.md) for the canonical list). Each lives in its own GitHub repo under `C:\Users\benco\code\<project-name>`. Each is moving at its own pace, with its own milestones, its own brand accent colour, and (often) different user audiences.
+
+For an AI agent to summarise progress across the portfolio, **every project must expose the same minimal metadata at the same path with the same shape.** That is what `PROJECT.md` is for.
+
+### The `PROJECT.md` schema (copy from `PROJECT-TEMPLATE.md`)
+
+Every project root contains a `PROJECT.md` with two parts:
+
+1. **YAML frontmatter** — machine-readable fields. Stable. The agent reads these to filter, sort, group, and pick accent colours.
+2. **Prose body with fixed section headings** — human-readable. The agent reads these to draft post copy.
+
+Required frontmatter fields (others optional):
+
+```yaml
+---
+project: stashery                            # slug, matches folder name
+display_name: Stashery                       # for human-facing copy
+tagline: Model train marketplace & inventory # one-line description
+status: phase-1-beta                         # idea | scaffolding | phase-1-beta | live | paused | retired
+accent_color: amber                          # matches the WYCO style guide product family table
+github: https://github.com/bencoton/stashery
+deploy_url: https://stashery.wyco-digital.com
+started: 2025-09-15
+last_updated: 2026-05-23                     # bump every time you edit this file
+audience: collectors of OO-gauge model trains  # who this is FOR (drives social tone)
+public: false                                # true = OK to post about publicly; false = stealth
+---
+```
+
+Required section headings (in this order, do not rename):
+
+- `## What this is` — one paragraph anyone could understand. No jargon.
+- `## Current phase` — one paragraph: what milestone you are on and what defines "done".
+- `## Shipped recently` — reverse-chronological rolling log (last ~6 weeks). Each bullet = one user-visible change with a date and optionally a PR/commit link.
+- `## Up next` — what you expect to ship this week and next week.
+- `## Metrics` — bullets of any numbers worth tracking (users, items, revenue, latency). Skip if none.
+- `## Social-post hooks` — short tags worth mentioning publicly when relevant ("AI photo identification", "100% Claude-generated", "built in 3 weeks"). The agent picks from here.
+
+### How the AI agent runs (Cowork, end-of-week or mid-week)
+
+When you ask Cowork to "draft my mid-week social update" or "give me an end-of-week post", it should:
+
+1. **List every immediate subfolder** of `C:\Users\benco\code\` that contains a `PROJECT.md`. Skip folders that do not (e.g. this `Ways of Working` folder itself — there is no project here).
+2. **Skip any project where `public: false`** in frontmatter. Those are stealth — never post about them without explicit go-ahead.
+3. **For each remaining project, read** `PROJECT.md` + the last 7 days of `NOTES.md` entries + `git log --since="7 days ago" --oneline` from the repo. The git log is the ground-truth check on what actually shipped; `NOTES.md` adds the human "why"; `PROJECT.md` adds the framing.
+4. **Group by cadence:**
+   - **Mid-week update (e.g. Wednesday)** — lead with momentum signals: 1–2 things shipped Monday/Tuesday, 1 thing coming Thursday/Friday. Keep it short, single post per project or one combined post.
+   - **End-of-week update (e.g. Friday)** — fuller retrospective: every public project gets one paragraph or one bullet. Lead with the most visually-shippable item (a screenshot, a metric, a launch). Cap the whole thing at one LinkedIn-length post or a short thread.
+5. **Apply the WyCo voice** from [`WYCO-DIGITAL-STYLE-GUIDE.md`](./WYCO-DIGITAL-STYLE-GUIDE.md) — *
