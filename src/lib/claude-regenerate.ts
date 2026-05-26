@@ -118,18 +118,24 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 1024,
+    // `cache_control: { type: "ephemeral" }` is accepted by the API but the
+    // SDK types we're pinned to (@anthropic-ai/sdk ^0.30.1) don't declare it
+    // on TextBlockParam or Tool yet. Cast to any at the per-block level so
+    // we keep the prompt-caching behaviour without bumping the SDK major.
     system: [
       {
         type: "text",
         text: DRAFT_SYSTEM_PROMPT,
         cache_control: { type: "ephemeral" },
-      },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
     ],
     tools: [
       {
         ...REGENERATE_TOOL,
         cache_control: { type: "ephemeral" },
-      },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
     ],
     tool_choice: { type: "tool", name: REGENERATE_TOOL.name },
     messages: [{ role: "user", content: parts.join("\n") }],

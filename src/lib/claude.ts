@@ -152,18 +152,23 @@ export async function generateDrafts(): Promise<GenerationResult> {
     max_tokens: 4096,
     // System prompt array form lets us attach cache_control. The string form
     // doesn't support per-block cache control.
+    // `cache_control` is accepted by the API but missing from the SDK types
+    // we're pinned to (@anthropic-ai/sdk ^0.30.1). Per-block `as any` keeps
+    // the prompt-caching behaviour without a major SDK bump.
     system: [
       {
         type: "text",
         text: DRAFT_SYSTEM_PROMPT,
         cache_control: { type: "ephemeral" },
-      },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
     ],
     tools: [
       {
         ...DRAFT_TOOL,
         cache_control: { type: "ephemeral" },
-      },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
     ],
     tool_choice: { type: "tool", name: DRAFT_TOOL.name },
     messages: [{ role: "user", content: userMessage }],
