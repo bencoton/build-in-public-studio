@@ -202,13 +202,21 @@ export async function generateDrafts(): Promise<GenerationResult> {
     });
   }
 
+  // Cache token fields exist on the API response but are missing from the
+  // SDK's Usage type at ^0.30.1 (same type-lag as cache_control). Widen the
+  // shape locally so the rest of the typing stays honest.
+  const usage = response.usage as typeof response.usage & {
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  };
+
   return {
     generationId,
     momentCount: parsed.length,
-    inputTokens: response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
-    cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
-    cacheCreationTokens: response.usage.cache_creation_input_tokens ?? 0,
+    inputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+    cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
   };
 }
 
@@ -334,7 +342,10 @@ async function deriveMomentRepo(
   }
 
   if (repos.size === 1) {
-    return [...repos][0];
+    // Array.from rather than [...repos] — the spread-on-iterable form needs
+    // ES2015+ target which our tsconfig may not opt into; Array.from works
+    // at any target.
+    return Array.from(repos)[0];
   }
   // Zero or multiple repos — leave null (general / multi-repo / unknown).
   return null;
