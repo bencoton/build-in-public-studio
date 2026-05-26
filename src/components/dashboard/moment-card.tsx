@@ -88,7 +88,7 @@ export function MomentCard({ moment }: { moment: MomentWithDrafts }) {
           <DraftVariant draft={active} />
         ) : (
           <p className="text-sm text-muted-foreground italic py-4">
-            (missing — Claude didn't return this variant)
+            (missing — Claude didn&apos;t return this variant)
           </p>
         )}
       </CardContent>
