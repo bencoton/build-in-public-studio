@@ -1,0 +1,25 @@
+# Force LF line endings for all text files regardless of OS.
+# This stops "every line modified" diffs when Windows tools re-save
+# files with CRLF on top of an LF-committed working tree.
+* text=auto eol=lf
+# Explicit overrides for files that should always be LF.
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.mjs       text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.sql       text eol=lf
+*.sh        text eol=lf
+# Lock files are large; keep them LF too for cleaner diffs.
+package-lock.json text eol=lf
+# Binary file overrides (so git doesn't try to text-diff them).
+*.ico       binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.webp      binary
+*.sqlite    binary

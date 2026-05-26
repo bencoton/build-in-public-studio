@@ -44,3 +44,6 @@ next-env.d.ts
 
 # migration backups — schema/data dumps may contain personal info, never commit
 migration-backups/
+
+# Cowork session config — local-only.
+.claude/
