@@ -9,9 +9,10 @@ export type SyncActionResult =
   | { ok: false; error: string };
 
 /**
- * Manual "Sync now" trigger from the /debug/commits page. The real Monday-9am
- * scheduler ships in Stage 9; this is the way to refresh during development
- * and for users who want to force-fetch between scheduled runs.
+ * Manual "Sync now" trigger from the /debug/commits page. The weekly Vercel
+ * Cron (Stage 9b.4) triggers /api/cron/generate, which calls generateDrafts(),
+ * which calls syncWatchedRepos() internally — so the cron path already covers
+ * the scheduled refresh. This button stays for force-fetching between runs.
  */
 export async function syncCommitsAction(): Promise<SyncActionResult> {
   try {

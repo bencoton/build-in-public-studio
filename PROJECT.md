@@ -7,7 +7,7 @@ accent_color: teal
 github: https://github.com/bencoton/build-in-public-studio
 deploy_url:
 started: 2026-05-24
-last_updated: 2026-05-25
+last_updated: 2026-05-26
 audience: solo devs and indie hackers shipping in public who want a weekly rhythm without writing every post from scratch
 public: true
 ---
@@ -26,7 +26,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 ## Current phase
 
-**Phase 1b — Tech stack migration.** Stages 9b.1 → 9b.3 complete. App is live on Vercel against Neon Postgres via the `postgres.js` client (transaction-mode pooler, `prepare: false`). Migrated from `better-sqlite3` → Supabase → Neon over two sessions; Supabase config retired, `supabase/` folder removed from the repo (a one-time backup of schema + RPC functions + JSON data dumps lives in `migration-backups/build-in-public-studio/`). **Stage 9b.4 next: Vercel Cron job for the Monday-9am-UK weekly generation**, then Stage 10 polish and Phase 1.5 features.
+**Phase 1b — Tech stack migration: complete.** Stages 9b.1 → 9b.4 shipped. App lives on Vercel against Neon Postgres via the `postgres.js` client (transaction-mode pooler, `prepare: false`). Weekly generation is triggered by **Vercel Cron** firing `/api/cron/generate` every Monday at 08:00 UTC (= 09:00 UK during BST), gated by a `CRON_SECRET` Bearer header. The dashboard's manual "Generate now" button calls the same `generateDrafts()` pipeline, so cron-triggered and manual runs are interchangeable. Supabase config retired, `supabase/` folder removed from the repo (a one-time backup of schema + RPC functions + JSON data dumps lives in `migration-backups/build-in-public-studio/`). **Next up: Stage 10 polish** (light-mode toggle, loading skeletons, error boundaries, SDK upgrade to remove type-lag casts), then Phase 1.5 features.
 
 ---
 
@@ -34,6 +34,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 <!-- Reverse-chronological log. Append new bullets at the top with each user-visible change. Each bullet: YYYY-MM-DD — what shipped. -->
 
+- **2026-05-26** — Stage 9b.4 shipped: Vercel Cron wired up for the Monday-9am weekly generation. New `vercel.json` with `crons: [{ path: "/api/cron/generate", schedule: "0 8 * * 1" }]` (Monday 08:00 UTC = 09:00 UK during BST). New `src/app/api/cron/generate/route.ts` — Node runtime, 60s `maxDuration` (hobby-tier cap), `force-dynamic`, verifies `Authorization: Bearer ${CRON_SECRET}` and returns 401 on mismatch / 500 if the env var isn't set on the server (fail-closed). On success it calls `generateDrafts()`, bumps `last_run_at`, and `revalidatePath("/")` so the dashboard picks up the new moments without a manual refresh. `CRON_SECRET` added to `.env.local.example` with a PowerShell one-liner to generate one. Five stale "Stage 9 scheduler" comments updated to reference the live Vercel Cron path. No dead Stage 9 files to delete — `instrumentation.ts`, `lib/scheduler.ts`, and the related `next.config.mjs` flags were all already removed in the 9b pivot.
 - **2026-05-26** — Stage 9b.3 shipped: app live on Vercel against Neon Postgres. Mid-deploy the DB client was pivoted again from `@supabase/supabase-js` to **`postgres.js`** (direct SQL, tagged template literals, native `Date` objects on `timestamptz` columns) — cleaner, removes a vendor abstraction, gives us real types end-to-end. Four Vercel-only build errors fixed in flight: JSX apostrophe escape, two `cache_control` type casts past `@anthropic-ai/sdk` type-lag, `Usage` field widening for cache tokens, and `Array.from(repos)[0]` for ES2015-target Set iteration. Repo housekeeping: `.gitattributes` enforcing LF line endings (commit `12109a5`), `.claude/` added to `.gitignore`, retired `supabase/` folder removed (schema + RPC + JSON data dumps preserved in `migration-backups/`).
 - **2026-05-25** — Stage 9b.2 shipped: every `src/lib/` DB helper ported from `node:sqlite` to `@supabase/supabase-js`. `db.ts` deleted (zero remaining callers). All `src/app/` server components and server actions updated to await the now-async DB calls. Multi-row transactions (`insertMomentWithDrafts`) handled via a Postgres RPC function in migration `20260525180000_rpc_functions.sql`. Timestamp parser unified into a single `parseTimestamp()` helper that handles both Postgres ISO 8601 with offset and legacy SQLite shapes (the previous one was Invalid-Date-ing on Postgres returns). Ben verified end-to-end: notes round-trip, commits sync, generation, edit / regenerate / approve / reject / Copy+Open / mark-posted, history filters, ratings. Voice-learning loop deferred to user acceptance testing.
 - **2026-05-25** — Stage 9b.1 shipped: Supabase project created in London region, CLI linked, initial schema migration `20260525000000_initial_schema.sql` applied (six tables: notes, watched_repos, commits, moments, drafts, settings — all with RLS enabled). TypeScript types generated to `src/types/database.ts`. `@supabase/supabase-js` added to deps. `.env.local` populated with Supabase URL + anon + service-role keys. Foundation for the tech-stack pivot is in place; the DB access layer still uses `node:sqlite` until Stage 9b.2 ports it.
@@ -54,22 +55,17 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 ## Up next
 
-**This week (pivot in progress):**
-
-1. **Stage 9b.1** — Set up Supabase project, install CLI, write initial schema migration, link the project. *In progress.*
-2. **Stage 9b.2** — Port DB access layer (notes, commits, moments, drafts, settings, history) from node:sqlite to @supabase/supabase-js.
-3. **Stage 9b.3** — Deploy to Vercel. Live URL, private hobby tier.
-4. **Stage 9b.4** — Vercel Cron job for the Monday-9am-UK generation. Delete the old instrumentation + scheduler files.
-
 **Next session:**
 
-5. **Phase 1.5a** — Product summaries. Two new generation modes per project: website summary (structured: tagline + paragraphs + feature list) and launch announcement (X thread + IH long-form). Surfaced on a new sidebar item, "Summaries".
-6. **Phase 1.5b** — Batch from previous work + scheduling. Custom time window, generates 10–15 moments, auto-staggers release dates. Now trivial on the new stack: a `scheduled_for` column + an hourly Vercel Cron checks the queue.
-7. **Stage 10** — Polish: light-mode toggle, loading skeletons, error boundaries, micro-animations.
+1. **Stage 10** — Polish: light-mode toggle (re-add `next-themes`), loading skeletons, error boundaries, micro-animations. Also bump `@anthropic-ai/sdk` to the latest to drop the three `as any` `cache_control` casts and the local `Usage` widening in `claude.ts` / `claude-regenerate.ts`.
+2. **Phase 1.5a** — Product summaries. Two new generation modes per project: website summary (structured: tagline + paragraphs + feature list) and launch announcement (X thread + IH long-form). Surfaced on a new sidebar item, "Summaries".
+3. **Phase 1.5b** — Batch from previous work + scheduling. Custom time window, generates 10–15 moments, auto-staggers release dates. Trivial on the new stack: a `scheduled_for` column + an hourly Vercel Cron checks the queue.
+
+**Verification still outstanding for Stage 9b.4:** Ben needs to (a) generate a `CRON_SECRET`, (b) add it to `.env.local` and to Vercel's Environment Variables (Production + Preview + Development, marked Sensitive), (c) deploy, (d) trigger the cron URL manually with the Bearer header to confirm it runs, then wait for the first real Monday firing before treating the schedule itself as proven.
 
 **Phase 2 (later):**
 
-- OSS launch — flip the GitHub repo to public, polish the README with screenshots, **draft the launch posts using the tool itself**, post to Indie Hackers + X.
+- OSS launch — flip the GitHub repo to public, polish the README with screenshots, **draft the launch posts using the tool itself**, post to Indie Hackers + X. Rotate `CRON_SECRET`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, and `DATABASE_URL` before flipping the repo public, since anything that's been on the dev machine through copy-paste is treated as potentially compromised.
 
 ---
 

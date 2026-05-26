@@ -16,7 +16,7 @@ Ben. Beginner-leaning developer. Backend / scripting experience; mobile is newer
 
 ## Project basics
 
-- **Stack:** Web — Next.js 14 (App Router) + TypeScript + Tailwind. Postgres via Neon (`postgres.js` client, pooled connection, `prepare: false` for the transaction-mode pooler). Deployed to Vercel with Anthropic + GitHub API keys as env vars. Migrated from `better-sqlite3` → Supabase → Neon over Stages 9b.1–9b.3; see Migration-Runbook.md Part 2.1 in the WoW folder for context.
+- **Stack:** Web — Next.js 14 (App Router) + TypeScript + Tailwind. Postgres via Neon (`postgres.js` client, pooled connection, `prepare: false` for the transaction-mode pooler). Deployed to Vercel with Anthropic + GitHub API keys as env vars. Weekly generation is triggered by **Vercel Cron** (Stage 9b.4) — schedule in `vercel.json`, gated route at `/api/cron/generate` that requires a `CRON_SECRET` Bearer header. Migrated from `better-sqlite3` → Supabase → Neon over Stages 9b.1–9b.3; see Migration-Runbook.md Part 2.1 in the WoW folder for context.
 - **Default UI theme:** dark, with a light toggle (the toggle ships in Stage 10 — until then, dark only).
 - **Accent colour:** Teal — the parent WyCo brand primary (`#14b8a6`). Build-in-Public Studio is positioned as a meta-tool in the WyCo family, not a separate product, so it borrows the parent brand colour rather than claiming a new slot in the product-family table.
 - **Audience:** solo devs and indie hackers shipping in public. Public from day one.
@@ -39,8 +39,9 @@ Ben. Beginner-leaning developer. Backend / scripting experience; mobile is newer
 2. **The "I'm a beginner learning" angle in drafted posts is on-brand, not a weakness.** Drafts that lean into that are good; drafts that paper over it (overconfident, claiming expertise) are off-brand.
 3. **Banned words for drafted posts (bake into the Claude prompt):** revolutionize, leverage, unlock, delve, "in today's fast-paced world", "I'm excited to share". Plus any words the user adds in Settings.
 4. **Mark anything uncertain in drafted posts with `[VERIFY]`.** Hallucinated specifics are worse than admitting a gap.
-5. **API keys never in code, never in commits.** All secrets live in `.env.local` only. The `.gitignore` covers `.env*.local`.
+5. **API keys never in code, never in commits.** All secrets live in `.env.local` only. The `.gitignore` covers `.env*.local`. **Includes `CRON_SECRET`** — the Bearer token Vercel Cron sends to `/api/cron/generate`. Must be set identically in `.env.local` (for parity) and in Vercel's Environment Variables (Production + Preview + Development, marked Sensitive). If it's missing in Vercel, the cron endpoint returns 500 "Server misconfiguration" by design — fail closed.
 6. **One clear takeaway per post.** Specific over generic ("3 hours debugging one missing await" > "fixed a bug").
+7. **Vercel Cron schedules are UTC-only.** The schedule in `vercel.json` (`0 8 * * 1`) is Monday 08:00 UTC, which is 9am UK during BST and 8am UK during GMT. The DB-stored `schedule_cron` setting (used by `AppHeader` to render "Next run: in X") is timezone-aware via cron-parser, so the countdown shown in the UI stays accurate year-round even though the trigger time drifts by an hour at DST changeover.
 
 ## Lessons learned (project-specific)
 

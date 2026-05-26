@@ -63,12 +63,10 @@ export function parseTimestamp(input: string): Date {
 
 /**
  * Tiny "5 minutes ago" formatter — avoids pulling in date-fns just for this.
- * Stage 9 (the cron scheduler) will need real timezone handling and at that
- * point we add date-fns properly.
- *
- * Input: an ISO-ish string from SQLite's CURRENT_TIMESTAMP, e.g.
- * "2026-05-25 14:32:11". SQLite emits UTC by default without a timezone
- * marker, so we explicitly treat it as UTC.
+ * Postgres returns ISO 8601 with offset on timestamptz columns, which Date()
+ * parses correctly without any timezone fiddling. The legacy SQLite shape
+ * ("YYYY-MM-DD HH:MM:SS", UTC, no marker) is still handled by parseTimestamp()
+ * so old data round-trips.
  */
 export function relativeTime(input: string | Date): string {
   const then =

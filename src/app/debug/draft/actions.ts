@@ -10,7 +10,8 @@ export type GenerateActionResult =
 
 /**
  * Manual "Generate drafts now" trigger from the /debug/draft page. The
- * Monday-9am scheduler in Stage 9 calls the same `generateDrafts()` function.
+ * Vercel Cron job (Stage 9b.4) calls the same `generateDrafts()` function
+ * via /api/cron/generate, so manual and scheduled runs are interchangeable.
  */
 export async function generateDraftsAction(): Promise<GenerateActionResult> {
   try {
