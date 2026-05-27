@@ -2,7 +2,8 @@
 
 // Schedule + tone settings. One form, one save button, three fields.
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { Clock, Ban, Type } from "lucide-react";
 
 import {
@@ -27,7 +28,7 @@ export function PreferencesForm({
   bannedWords,
   styleNotes,
 }: Props) {
-  const [state, formAction] = useFormState(savePreferencesAction, initialState);
+  const [state, formAction] = useActionState(savePreferencesAction, initialState);
 
   // Field styling shared across the three inputs.
   const inputClass =
@@ -59,8 +60,9 @@ export function PreferencesForm({
             />
             <p className="text-xs text-muted-foreground">
               Default <code className="font-mono">0 9 * * 1</code> = 9am every
-              Monday (server local time). The cron job ships in Stage 9 — until
-              then this value just gets saved.
+              Monday (Europe/London). Used by the AppHeader to compute &quot;Next
+              run&quot;; the actual Vercel Cron fires from{" "}
+              <code className="font-mono">vercel.json</code> at 08:00 UTC Monday.
             </p>
           </div>
 

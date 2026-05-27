@@ -34,6 +34,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 <!-- Reverse-chronological log. Append new bullets at the top with each user-visible change. Each bullet: YYYY-MM-DD — what shipped. -->
 
+- **2026-05-27** — Stage 10.4 shipped: light-mode toggle via `next-themes`. Sun/moon button in the AppHeader; hydration-safe `mounted` gate so the server placeholder matches the client render. Root layout rewired: hardcoded `<html className="dark">` removed, body content wrapped in a `ThemeProvider` (`attribute="class"`, `defaultTheme="dark"`, `enableSystem={false}`, `disableTransitionOnChange`). Light-mode token tweak in `globals.css` — page background dropped from pure white to slate-50 so the white cards visibly lift off the page (Linear / Vercel / Stripe pattern); borders nudged a touch darker for clearer card edges; secondary / muted / accent stepped to slate-100 to retain contrast against the new background. Dark mode unchanged. Also fixed the React 19 migration that came with Next 16: `useFormState` is now `useActionState` (moved from `react-dom` to `react`) — three files updated (`note-form.tsx`, `preferences-form.tsx`, `watched-repos-section.tsx`). Piggyback: stale "cron job ships in Stage 9" copy in the schedule field's help text rewritten to reference the live Vercel Cron path.
 - **2026-05-27** — Stage 10.3 shipped: `@anthropic-ai/sdk` bumped from `^0.30.1` → `^0.99.0`. Removed four `as any` casts on `cache_control` (two in `claude.ts`, two in `claude-regenerate.ts`) and two local `Usage` widenings for `cache_read_input_tokens` / `cache_creation_input_tokens` — the SDK now properly types both. Replaced top-level `as const` on the tool definitions with a targeted `type: "object" as const` on each `input_schema.type` field (broad `as const` made `input_schema.required` a readonly tuple that didn't fit the SDK's mutable `string[]`). Also documented that Next.js is on 16.2.6, not 14.x — Vercel has been deploying on Next 16 since the bump landed; the cron test on Stage 9b.4 already ran successfully on it. CLAUDE.md stack line updated.
 - **2026-05-27** — Stage 10.2 shipped: loading skeletons across all routes via a new `Skeleton` primitive in `src/components/ui/skeleton.tsx` (Tailwind `animate-pulse`, no new deps). One `loading.tsx` per route — dashboard, history, notes, settings, debug/commits, debug/draft — each shaped to roughly match its page so the swap from skeleton to real content doesn't reflow. Tiny piggyback: the stale "Everything else is stored in Supabase" line in `src/app/settings/page.tsx` corrected to Postgres.
 - **2026-05-27** — Stage 10.1 shipped: error boundaries. `src/app/error.tsx` renders a friendly "Something went wrong" card with the error message, a Try Again button (calls `reset()`), and a link back to the dashboard. `src/app/global-error.tsx` is the last-resort boundary that catches errors thrown in the root layout itself; uses inline styles only so it renders even if Tailwind / the font pipeline is the thing that broke. Both surface `error.digest` for Vercel log correlation.
@@ -58,14 +59,10 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 ## Up next
 
-**This session:**
-
-1. **Stage 10.4** — Light-mode toggle via `next-themes`. Wrap the root layout in `ThemeProvider`, add a sun/moon toggle in `AppHeader`, verify both themes render cleanly. *In progress (final Stage 10 sub-task).*
-
 **Next session:**
 
-2. **Phase 1.5a** — Product summaries. Two new generation modes per project: website summary (structured: tagline + paragraphs + feature list) and launch announcement (X thread + IH long-form). Surfaced on a new sidebar item, "Summaries".
-3. **Phase 1.5b** — Batch from previous work + scheduling. Custom time window, generates 10–15 moments, auto-staggers release dates. Trivial on the new stack: a `scheduled_for` column + an hourly Vercel Cron checks the queue.
+1. **Phase 1.5a** — Product summaries. Two new generation modes per project: website summary (structured: tagline + paragraphs + feature list) and launch announcement (X thread + IH long-form). Surfaced on a new sidebar item, "Summaries".
+2. **Phase 1.5b** — Batch from previous work + scheduling. Custom time window, generates 10–15 moments, auto-staggers release dates. Trivial on the new stack: a `scheduled_for` column + an hourly Vercel Cron checks the queue.
 
 **Phase 2 (later):**
 

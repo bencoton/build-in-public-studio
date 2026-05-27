@@ -3,8 +3,8 @@
 // Watched-repos picker. Loads the user's repos on demand (only after the
 // GitHub key is set), shows them as checkboxes, and saves the selection.
 
-import { useState, useTransition } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState, useState, useTransition } from "react";
+import { useFormStatus } from "react-dom";
 import { Github, Loader2, RefreshCw, Lock } from "lucide-react";
 
 import {
@@ -33,7 +33,7 @@ export function WatchedReposSection({ githubSet, initialWatched }: Props) {
   const [repos, setRepos] = useState<GithubRepo[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadPending, startLoading] = useTransition();
-  const [saveState, saveAction] = useFormState(
+  const [saveState, saveAction] = useActionState(
     saveWatchedReposAction,
     initialSaveState,
   );

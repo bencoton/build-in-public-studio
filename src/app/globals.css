@@ -11,25 +11,28 @@
 */
 @layer base {
   :root {
-    /* Light mode — used when a light toggle is added in Stage 10. */
-    --background: 0 0% 100%;          /* white */
+    /* Light mode — toggled by next-themes (Stage 10.4). Page background sits
+       a half-shade off pure white (slate-50) so white cards visibly lift off
+       the page instead of blending into it. Linear / Vercel / Stripe all do
+       this in their light themes. */
+    --background: 210 40% 98%;        /* slate-50 */
     --foreground: 222 47% 11%;        /* slate-900 */
-    --card: 0 0% 100%;
+    --card: 0 0% 100%;                /* white — cards stay pure */
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
     --primary: 173 80% 40%;           /* teal-500 #14b8a6 */
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96%;
+    --secondary: 210 40% 94%;         /* slate-100 — slightly darker than bg */
     --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
+    --muted: 210 40% 94%;
     --muted-foreground: 215 16% 47%;  /* slate-500 */
-    --accent: 210 40% 96%;
+    --accent: 210 40% 94%;
     --accent-foreground: 222 47% 11%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 91%;            /* slate-200 */
-    --input: 214 32% 91%;
+    --border: 214 32% 88%;            /* slate-200, a touch darker for clearer card edges */
+    --input: 214 32% 88%;
     --ring: 173 80% 40%;              /* teal-500 — focus ring */
     --radius: 0.5rem;                 /* 8px (buttons); cards use lg = 12px */
     /* WyCo brand colours, used directly via bg-wyco-* / text-wyco-* */

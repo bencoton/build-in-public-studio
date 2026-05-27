@@ -4,6 +4,7 @@ import "./globals.css";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppHeader } from "@/components/app-header";
+import { ThemeProvider } from "@/components/theme-provider";
 
 // WyCo brand fonts, loaded via next/font/google — this is built into Next.js
 // (no extra dependency), and Next.js self-hosts the font files so there is no
@@ -42,20 +43,27 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // class="dark" activates the WyCo dark theme. The light toggle ships in Stage 10.
-    // suppressHydrationWarning is here so when next-themes is wired in later it
-    // doesn't trigger React's class-mismatch warning during hydration.
-    <html lang="en" className="dark" suppressHydrationWarning>
+    // suppressHydrationWarning is required by next-themes: it mutates the
+    // <html> class on the client to apply the chosen theme, which would
+    // otherwise trigger React's class-mismatch warning during hydration.
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}
       >
-        <div className="flex min-h-screen">
-          <AppSidebar />
-          <div className="flex-1 flex flex-col min-w-0">
-            <AppHeader />
-            <main className="flex-1 p-8 animate-fade-in">{children}</main>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          <div className="flex min-h-screen">
+            <AppSidebar />
+            <div className="flex-1 flex flex-col min-w-0">
+              <AppHeader />
+              <main className="flex-1 p-8 animate-fade-in">{children}</main>
+            </div>
           </div>
-        </div>
+        </ThemeProvider>
       </body>
     </html>
   );

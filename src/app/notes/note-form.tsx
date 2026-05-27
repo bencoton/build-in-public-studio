@@ -1,11 +1,14 @@
 "use client";
 
-// The note-input form. Runs in the browser because we need useFormState to
+// The note-input form. Runs in the browser because we need useActionState to
 // surface the server action's result (success / error) and useFormStatus to
 // disable the button while submission is in flight.
+//
+// Note: useActionState moved from react-dom to react in React 19 (was
+// useFormState in earlier versions). useFormStatus stays in react-dom.
 
-import { useFormState, useFormStatus } from "react-dom";
-import { useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef } from "react";
+import { useFormStatus } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { saveNoteAction, type SaveNoteResult } from "./actions";
@@ -18,7 +21,7 @@ type Props = {
 };
 
 export function NoteForm({ repos }: Props) {
-  const [state, formAction] = useFormState(saveNoteAction, initialState);
+  const [state, formAction] = useActionState(saveNoteAction, initialState);
   const formRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
