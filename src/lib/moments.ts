@@ -19,6 +19,10 @@ export type DraftRow = {
   rating: "star" | "flop" | "neutral" | null;
   posted_url: string | null;
   posted_at: Date | null;
+  /** When the draft is meant to be posted. NULL = not scheduled (the weekly
+   *  cron path); populated by the batch-generation flow with auto-staggered
+   *  Mon/Thu dates that the user can edit per-draft. */
+  scheduled_for: Date | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -44,6 +48,10 @@ export async function insertMomentWithDrafts(args: {
   xThread: string;
   ihLong: string;
   repo: string | null;
+  /** Optional: when set, both new drafts get this scheduled_for date.
+   *  Used by the batch-generation flow; the weekly cron leaves this NULL
+   *  (its drafts are for immediate review, not pre-scheduled posting). */
+  scheduledFor?: Date | null;
 }): Promise<number> {
   const result = await sql<Array<{ id: number | null }>>`
     SELECT insert_moment_with_drafts(
@@ -60,7 +68,20 @@ export async function insertMomentWithDrafts(args: {
   if (id === null || id === undefined) {
     throw new Error("insertMomentWithDrafts: RPC returned no id");
   }
-  return Number(id);
+  const momentId = Number(id);
+
+  // If a scheduled date was supplied, stamp both variants. Separate UPDATE
+  // rather than extending the RPC — keeps the RPC stable and avoids another
+  // migration round-trip for what's a single-purpose feature.
+  if (args.scheduledFor) {
+    await sql`
+      UPDATE drafts
+      SET scheduled_for = ${args.scheduledFor}, updated_at = now()
+      WHERE moment_id = ${momentId}
+    `;
+  }
+
+  return momentId;
 }
 
 /** All moments in the most recent generation, with their drafts attached. */
@@ -95,7 +116,7 @@ export async function getMomentsByGeneration(
   const momentIds = moments.map((m) => m.id);
   const drafts = await sql<DraftRow[]>`
     SELECT id, moment_id, variant, content, status, rating,
-           posted_url, posted_at, created_at, updated_at
+           posted_url, posted_at, scheduled_for, created_at, updated_at
     FROM drafts
     WHERE moment_id IN ${sql(momentIds)}
   `;

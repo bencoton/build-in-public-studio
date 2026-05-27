@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 
 import {
   updateDraftContent,
+  updateDraftScheduledFor,
   updateDraftStatus,
   type DraftStatus,
 } from "@/lib/draft-mutations";
+import { fromLocalDateString } from "@/lib/scheduling";
 import { regenerateDraft, type RegenerateResult } from "@/lib/claude-regenerate";
 import { generateDrafts, type GenerationResult } from "@/lib/claude";
 import { markDraftAsPosted } from "@/lib/posting";
@@ -55,6 +57,32 @@ export async function regenerateDraftAction(
     const message = err instanceof Error ? err.message : "Unknown error.";
     return { ok: false, error: message };
   }
+}
+
+// ── Update scheduled_for ─────────────────────────────────────────────────
+
+/**
+ * Set or clear a draft's scheduled_for date. Accepts a YYYY-MM-DD string in
+ * UK local time (matching the date input's value), or null/empty to clear.
+ */
+export async function updateDraftScheduledForAction(
+  draftId: number,
+  scheduledFor: string | null,
+): Promise<SimpleActionResult> {
+  try {
+    if (!scheduledFor || scheduledFor.trim() === "") {
+      await updateDraftScheduledFor(draftId, null);
+    } else {
+      const parsed = fromLocalDateString(scheduledFor.trim());
+      await updateDraftScheduledFor(draftId, parsed);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    return { ok: false, error: message };
+  }
+  revalidatePath("/");
+  revalidatePath("/history");
+  return { ok: true };
 }
 
 // ── Change status (approve / reject / revert) ────────────────────────────

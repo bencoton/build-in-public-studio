@@ -6,13 +6,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, History, NotebookPen, Settings } from "lucide-react";
+import {
+  LayoutDashboard,
+  History,
+  NotebookPen,
+  Settings,
+  CalendarRange,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { WycoBadge } from "@/components/wyco-badge";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/batch", label: "Batch", icon: CalendarRange },
   { href: "/history", label: "History", icon: History },
   { href: "/notes", label: "Notes", icon: NotebookPen },
   { href: "/settings", label: "Settings", icon: Settings },

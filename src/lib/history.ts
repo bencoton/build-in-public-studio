@@ -46,6 +46,7 @@ export async function getAllDrafts(
       rating: DraftRow["rating"];
       posted_url: string | null;
       posted_at: Date | null;
+      scheduled_for: Date | null;
       created_at: Date;
       updated_at: Date;
       moment_summary: string;
@@ -56,7 +57,7 @@ export async function getAllDrafts(
   >`
     SELECT
       d.id, d.moment_id, d.variant, d.content, d.status, d.rating,
-      d.posted_url, d.posted_at, d.created_at, d.updated_at,
+      d.posted_url, d.posted_at, d.scheduled_for, d.created_at, d.updated_at,
       m.summary      AS moment_summary,
       m.source_type  AS moment_source_type,
       m.created_at   AS moment_created_at,
@@ -123,6 +124,7 @@ export async function getStarredExamples(count: number): Promise<HistoryDraft[]>
       rating: DraftRow["rating"];
       posted_url: string | null;
       posted_at: Date | null;
+      scheduled_for: Date | null;
       created_at: Date;
       updated_at: Date;
       moment_summary: string;
@@ -133,7 +135,7 @@ export async function getStarredExamples(count: number): Promise<HistoryDraft[]>
   >`
     SELECT
       d.id, d.moment_id, d.variant, d.content, d.status, d.rating,
-      d.posted_url, d.posted_at, d.created_at, d.updated_at,
+      d.posted_url, d.posted_at, d.scheduled_for, d.created_at, d.updated_at,
       m.summary      AS moment_summary,
       m.source_type  AS moment_source_type,
       m.created_at   AS moment_created_at,
@@ -152,6 +154,56 @@ export async function getStarredExamples(count: number): Promise<HistoryDraft[]>
   shuffleInPlace(posted);
   shuffleInPlace(others);
   return [...posted, ...others].slice(0, safe);
+}
+
+/**
+ * Drafts scheduled to post within the next `daysAhead` days. Used by the
+ * dashboard's "Scheduled for the next 7 days" section to surface batch-
+ * generated content as it comes due. Joined to moments so we get the project
+ * label and summary alongside.
+ */
+export async function getScheduledDrafts(
+  daysAhead: number = 7,
+): Promise<HistoryDraft[]> {
+  const days = Math.min(Math.max(1, Math.floor(daysAhead)), 60);
+
+  const rows = await sql<
+    Array<{
+      id: number;
+      moment_id: number;
+      variant: DraftRow["variant"];
+      content: string;
+      status: DraftRow["status"];
+      rating: DraftRow["rating"];
+      posted_url: string | null;
+      posted_at: Date | null;
+      scheduled_for: Date | null;
+      created_at: Date;
+      updated_at: Date;
+      moment_summary: string;
+      moment_source_type: string;
+      moment_created_at: Date;
+      moment_repo: string | null;
+    }>
+  >`
+    SELECT
+      d.id, d.moment_id, d.variant, d.content, d.status, d.rating,
+      d.posted_url, d.posted_at, d.scheduled_for, d.created_at, d.updated_at,
+      m.summary      AS moment_summary,
+      m.source_type  AS moment_source_type,
+      m.created_at   AS moment_created_at,
+      m.repo         AS moment_repo
+    FROM drafts d
+    INNER JOIN moments m ON m.id = d.moment_id
+    WHERE d.scheduled_for IS NOT NULL
+      AND d.scheduled_for >= now() - interval '1 day'
+      AND d.scheduled_for <= now() + (${days} * interval '1 day')
+      AND d.status IN ('draft', 'approved')
+    ORDER BY d.scheduled_for ASC, d.id ASC
+    LIMIT 100
+  `;
+
+  return rows.map((r) => ({ ...r }));
 }
 
 /** Count drafts grouped by status — used by the history page header. */

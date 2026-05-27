@@ -16,6 +16,12 @@ import {
   ProjectTabs,
   type ProjectTab,
 } from "@/components/dashboard/project-tabs";
+import { ScheduledSection } from "@/components/dashboard/scheduled-section";
+
+// "Generate now" calls generateDrafts() server-side; on a cold container that
+// can take 60–120s. Pro tier caps at 300s; opt in so the action doesn't time
+// out during a manual trigger.
+export const maxDuration = 300;
 
 // The real dashboard. Server-renders the latest generation's moments;
 // each moment card is a client component that owns the edit / regenerate /
@@ -73,6 +79,12 @@ export default async function DashboardPage({
           <GenerateNowButton />
         </CardContent>
       </Card>
+
+      {/* Scheduled-for-the-next-7-days lives between the Generate panel and
+          the latest generation. Pulls from the dashboard live query — no
+          background cron required (Phase 1.5b decision). Renders nothing if
+          no scheduled drafts are due. */}
+      <ScheduledSection />
 
       {moments.length === 0 ? (
         <Card>

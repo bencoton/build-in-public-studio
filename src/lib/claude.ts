@@ -11,6 +11,7 @@ import {
 } from "./commits";
 import { insertMomentWithDrafts } from "./moments";
 import { getStarredExamples, type HistoryDraft } from "./history";
+import { stagger } from "./scheduling";
 import { DRAFT_SYSTEM_PROMPT } from "@/prompts/draft-system";
 
 /*
@@ -29,55 +30,61 @@ import { DRAFT_SYSTEM_PROMPT } from "@/prompts/draft-system";
 const MODEL = "claude-sonnet-4-6";
 
 // The schema Claude must satisfy. Per WyCo lessons: keep minItems low (1, not
-// 3) and encourage 3-5 in the prompt — over-constraining produces empty arrays.
-const DRAFT_TOOL = {
-  name: "submit_drafts",
-  description:
-    "Submit the moments you've identified for this week and their drafted posts. Always call this exactly once.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      moments: {
-        type: "array",
-        minItems: 0,
-        maxItems: 5,
-        items: {
-          type: "object",
-          properties: {
-            summary: {
-              type: "string",
-              description:
-                "One short line summarising the moment in concrete terms. Shown above the drafts in the UI.",
+// 3) and encourage N in the prompt — over-constraining produces empty arrays.
+// Wrapped in a function so the batch path can ask for more moments (up to 15)
+// while the weekly path stays at 5.
+function buildDraftTool(maxMoments: number) {
+  return {
+    name: "submit_drafts",
+    description:
+      "Submit the moments you've identified and their drafted posts. Always call this exactly once.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        moments: {
+          type: "array",
+          minItems: 0,
+          maxItems: maxMoments,
+          items: {
+            type: "object",
+            properties: {
+              summary: {
+                type: "string",
+                description:
+                  "One short line summarising the moment in concrete terms. Shown above the drafts in the UI.",
+              },
+              source_type: {
+                type: "string",
+                enum: ["commit", "note", "mixed"],
+                description: "Where this moment came from.",
+              },
+              source_refs: {
+                type: "array",
+                items: { type: "string" },
+                description:
+                  "Identifiers for the commits or notes that informed this moment — short SHAs for commits, note IDs for notes.",
+              },
+              x_thread: {
+                type: "string",
+                description:
+                  "X / Twitter thread as a single string. Numbered tweets (1/, 2/, 3/...) separated by blank lines. Each tweet under 280 characters.",
+              },
+              ih_long: {
+                type: "string",
+                description:
+                  "Indie Hackers long-form post, 300-600 words, conversational, one clear takeaway.",
+              },
             },
-            source_type: {
-              type: "string",
-              enum: ["commit", "note", "mixed"],
-              description: "Where this moment came from.",
-            },
-            source_refs: {
-              type: "array",
-              items: { type: "string" },
-              description:
-                "Identifiers for the commits or notes that informed this moment — short SHAs for commits, note IDs for notes.",
-            },
-            x_thread: {
-              type: "string",
-              description:
-                "X / Twitter thread as a single string. Numbered tweets (1/, 2/, 3/...) separated by blank lines. Each tweet under 280 characters.",
-            },
-            ih_long: {
-              type: "string",
-              description:
-                "Indie Hackers long-form post, 300-600 words, conversational, one clear takeaway.",
-            },
+            required: ["summary", "source_type", "source_refs", "x_thread", "ih_long"],
           },
-          required: ["summary", "source_type", "source_refs", "x_thread", "ih_long"],
         },
       },
+      required: ["moments"],
     },
-    required: ["moments"],
-  },
-};
+  };
+}
+
+const DRAFT_TOOL_NAME = "submit_drafts";
 
 export type GeneratedMoment = {
   summary: string;
@@ -96,41 +103,70 @@ export type GenerationResult = {
   cacheCreationTokens: number;
 };
 
+export type GenerateDraftsOptions = {
+  /** How many days back to pull commits + notes from. Default 7 (weekly). */
+  windowDays?: number;
+  /** Cap on moments Claude can return. Default 5 (weekly). Batch flow uses 15. */
+  maxMoments?: number;
+  /** Restrict to a single watched repo. Default null = all repos. */
+  repoFilter?: string | null;
+  /** When set, drafts are auto-stagger-scheduled Mon/Thu starting on this date. */
+  scheduling?: {
+    startDate: Date;
+  };
+  /** Optional override of the Claude max_tokens. Larger batches need more. */
+  maxOutputTokens?: number;
+};
+
 /**
- * Pull this week's commits + notes + user settings, call Claude with the
- * structured-output tool, persist the result, return a summary.
+ * Pull commits + notes within a window, call Claude with the structured-
+ * output tool, persist the result, return a summary. The same function
+ * services both the weekly Vercel Cron path (no options) and the batch-
+ * generation path (windowDays / maxMoments / scheduling).
  */
-export async function generateDrafts(): Promise<GenerationResult> {
+export async function generateDrafts(
+  options: GenerateDraftsOptions = {},
+): Promise<GenerationResult> {
+  const windowDays = options.windowDays ?? 7;
+  const maxMoments = options.maxMoments ?? 5;
+  const repoFilter = options.repoFilter ?? null;
+  const maxOutputTokens = options.maxOutputTokens ?? 4096;
+
   const key = getAnthropicKey();
   if (!key) {
     throw new Error("ANTHROPIC_API_KEY is not set. Configure it in Settings first.");
   }
 
-  // Window: last 7 days, matching the GitHub sync window.
-  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
 
-  // Pull commits and notes from the last 7 days. The commits table already
-  // contains only the synced ones, but we filter again here so a stale cache
-  // doesn't leak older commits in if the user hasn't synced recently.
-  // Note: voiceExamples and insertMomentWithDrafts are still sync — they're
-  // ported in Stage 9b.2 round 3.
-  const allCommits = await getRecentCommits(500);
-  const commits = allCommits.filter((c) => c.committed_at >= cutoff);
+  // Pull a generous cap of commits / notes, then filter to the window. The
+  // batch path with a long window will exhaust the cap in busy projects;
+  // bump these if you observe truncation in batch results.
+  const commitCap = Math.max(500, windowDays * 30);
+  const noteCap = Math.max(200, windowDays * 5);
 
-  const allNotes = await getRecentNotes(200);
-  const notes = allNotes.filter((n) => n.created_at >= cutoff);
+  const allCommits = await getRecentCommits(commitCap);
+  let commits = allCommits.filter((c) => c.committed_at >= cutoff);
+
+  const allNotes = await getRecentNotes(noteCap);
+  let notes = allNotes.filter((n) => n.created_at >= cutoff);
+
+  if (repoFilter) {
+    commits = commits.filter((c) => c.repo === repoFilter);
+    notes = notes.filter((n) => n.repo === repoFilter);
+  }
 
   if (commits.length === 0 && notes.length === 0) {
     throw new Error(
-      "No commits or notes from the last 7 days. Sync GitHub or add a note first.",
+      `No commits or notes in the last ${windowDays} day${windowDays === 1 ? "" : "s"}` +
+        (repoFilter ? ` for ${repoFilter}` : "") +
+        ". Sync GitHub or add a note first.",
     );
   }
 
   const [userBannedWords, styleNotes, voiceExamples] = await Promise.all([
     getBannedWords(),
     getStyleNotes(),
-    // Voice-learning loop: pull up to 10 random starred drafts as examples.
-    // Posted-and-starred entries are preferred (see getStarredExamples).
     getStarredExamples(10),
   ]);
 
@@ -140,7 +176,12 @@ export async function generateDrafts(): Promise<GenerationResult> {
     userBannedWords,
     styleNotes,
     voiceExamples,
+    windowDays,
+    maxMoments,
+    repoFilter,
   });
+
+  const tool = buildDraftTool(maxMoments);
 
   const client = new Anthropic({
     apiKey: key,
@@ -149,9 +190,7 @@ export async function generateDrafts(): Promise<GenerationResult> {
 
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 4096,
-    // System prompt array form lets us attach cache_control. The string form
-    // doesn't support per-block cache control.
+    max_tokens: maxOutputTokens,
     system: [
       {
         type: "text",
@@ -161,30 +200,38 @@ export async function generateDrafts(): Promise<GenerationResult> {
     ],
     tools: [
       {
-        ...DRAFT_TOOL,
+        ...tool,
         cache_control: { type: "ephemeral" },
       },
     ],
-    tool_choice: { type: "tool", name: DRAFT_TOOL.name },
+    tool_choice: { type: "tool", name: DRAFT_TOOL_NAME },
     messages: [{ role: "user", content: userMessage }],
   });
 
-  // Extract the tool_use block — there should be exactly one.
   const toolUse = response.content.find((b) => b.type === "tool_use");
   if (!toolUse || toolUse.type !== "tool_use") {
     throw new Error(
       `Claude didn't call submit_drafts. Stop reason: ${response.stop_reason}.`,
     );
   }
-  if (toolUse.name !== DRAFT_TOOL.name) {
+  if (toolUse.name !== DRAFT_TOOL_NAME) {
     throw new Error(`Claude called unexpected tool: ${toolUse.name}.`);
   }
 
   const parsed = parseMomentsPayload(toolUse.input);
 
+  // Pre-compute scheduled-for dates if a schedule was requested. Same date
+  // for both variants of a moment (typical workflow: post X thread + IH long
+  // on the same day). User can edit per-draft later.
+  const scheduledDates =
+    options.scheduling
+      ? stagger(options.scheduling.startDate, parsed.length)
+      : null;
+
   // Persist. Each generation gets a UUID so we can group its moments later.
   const generationId = randomUUID();
-  for (const moment of parsed) {
+  for (let i = 0; i < parsed.length; i++) {
+    const moment = parsed[i];
     const repo = await deriveMomentRepo(moment.source_type, moment.source_refs);
     await insertMomentWithDrafts({
       summary: moment.summary,
@@ -194,6 +241,7 @@ export async function generateDrafts(): Promise<GenerationResult> {
       xThread: moment.x_thread,
       ihLong: moment.ih_long,
       repo,
+      scheduledFor: scheduledDates ? scheduledDates[i] : null,
     });
   }
 
@@ -217,13 +265,21 @@ function buildUserMessage(args: {
   userBannedWords: string[];
   styleNotes: string;
   voiceExamples: HistoryDraft[];
+  windowDays: number;
+  maxMoments: number;
+  repoFilter: string | null;
 }): string {
   const parts: string[] = [];
+  const windowLabel = `last ${args.windowDays} day${args.windowDays === 1 ? "" : "s"}`;
 
-  parts.push("# This week's material\n");
+  parts.push(`# Material from the ${windowLabel}\n`);
+
+  if (args.repoFilter) {
+    parts.push(`*Scoped to project: \`${args.repoFilter}\`.*\n`);
+  }
 
   if (args.commits.length > 0) {
-    parts.push("## Commits (last 7 days, newest first)\n");
+    parts.push(`## Commits (${windowLabel}, newest first)\n`);
     for (const c of args.commits) {
       parts.push(
         `- ${c.repo} \`${c.sha.slice(0, 7)}\` (${c.committed_at.toISOString()}) — ${firstLine(c.message)}`,
@@ -231,16 +287,16 @@ function buildUserMessage(args: {
     }
     parts.push("");
   } else {
-    parts.push("## Commits\n\nNo commits in the last 7 days.\n");
+    parts.push(`## Commits\n\nNo commits in the ${windowLabel}.\n`);
   }
 
   if (args.notes.length > 0) {
-    parts.push("## Notes (last 7 days, newest first)\n");
+    parts.push(`## Notes (${windowLabel}, newest first)\n`);
     for (const n of args.notes) {
       parts.push(`### Note ${n.id} (${n.created_at.toISOString()})\n${n.content}\n`);
     }
   } else {
-    parts.push("## Notes\n\nNo notes in the last 7 days.\n");
+    parts.push(`## Notes\n\nNo notes in the ${windowLabel}.\n`);
   }
 
   parts.push("\n---\n");
@@ -282,8 +338,11 @@ function buildUserMessage(args: {
     parts.push("---\n");
   }
 
+  // Lower bound for the moment count: aim for ~60% of the cap on rich windows,
+  // but always allow Claude to return fewer if the material is thin.
+  const lowerHint = Math.max(1, Math.floor(args.maxMoments * 0.6));
   parts.push(
-    "Identify 3-5 moments worth posting about. If the week is thin, return fewer (or zero) rather than padding with weak ones. Call submit_drafts with the result.",
+    `Identify ${lowerHint}-${args.maxMoments} moments worth posting about. If the ${windowLabel} is thin, return fewer (or zero) rather than padding with weak ones. Call submit_drafts with the result.`,
   );
 
   return parts.join("\n");

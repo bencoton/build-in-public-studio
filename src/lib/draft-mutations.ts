@@ -31,6 +31,23 @@ export async function updateDraftContent(
   }
 }
 
+/** Update a draft's scheduled_for date (or clear it by passing null). */
+export async function updateDraftScheduledFor(
+  draftId: number,
+  scheduledFor: Date | null,
+): Promise<void> {
+  try {
+    await sql`
+      UPDATE drafts
+      SET scheduled_for = ${scheduledFor}, updated_at = now()
+      WHERE id = ${draftId}
+    `;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`updateDraftScheduledFor(${draftId}): ${msg}`);
+  }
+}
+
 /** Update a draft's status — used by approve / reject / revert flows. */
 export async function updateDraftStatus(
   draftId: number,
@@ -63,7 +80,7 @@ export async function getDraftWithMoment(
 ): Promise<{ draft: DraftRow; moment: MomentRow } | null> {
   const draftRows = await sql<DraftRow[]>`
     SELECT id, moment_id, variant, content, status, rating,
-           posted_url, posted_at, created_at, updated_at
+           posted_url, posted_at, scheduled_for, created_at, updated_at
     FROM drafts
     WHERE id = ${draftId}
     LIMIT 1

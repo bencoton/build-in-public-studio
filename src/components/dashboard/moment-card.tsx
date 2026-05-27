@@ -30,6 +30,7 @@ import {
 } from "@/app/dashboard-actions";
 import type { MomentWithDrafts, DraftRow } from "@/lib/moments";
 import { CopyOpenFlow } from "./copy-open-flow";
+import { ScheduledDateEditor } from "./scheduled-date-editor";
 
 type Variant = "x_thread" | "ih_long";
 const VARIANT_LABEL: Record<Variant, string> = {
@@ -157,7 +158,7 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 text-xs">
+      <div className="flex items-center gap-2 text-xs flex-wrap">
         <StatusBadge status={draft.status} />
         {draft.posted_url && (
           <a
@@ -168,6 +169,14 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
           >
             posted ↗
           </a>
+        )}
+        {/* Schedule editor only shown for actionable drafts. Posted/rejected
+            drafts are terminal; their scheduled date is irrelevant. */}
+        {draft.status !== "posted" && draft.status !== "rejected" && (
+          <ScheduledDateEditor
+            draftId={draft.id}
+            currentScheduledFor={draft.scheduled_for}
+          />
         )}
       </div>
 
