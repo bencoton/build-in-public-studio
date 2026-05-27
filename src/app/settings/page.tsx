@@ -11,8 +11,9 @@ import { WatchedReposSection } from "./watched-repos-section";
 import { PreferencesForm } from "./preferences-form";
 
 // Async server component — env state is sync (just reads process.env), but
-// the four DB reads are now async (Supabase). Promise.all runs them in
-// parallel so the page TTFB is one round-trip, not four sequential ones.
+// the four DB reads are now async (Postgres via postgres.js). Promise.all
+// runs them in parallel so the page TTFB is one round-trip, not four
+// sequential ones.
 
 export default async function SettingsPage() {
   const keys = readApiKeyState();
@@ -30,7 +31,7 @@ export default async function SettingsPage() {
         <p className="text-base text-muted-foreground max-w-2xl">
           API keys, watched repos, schedule, and tone. Keys live in{" "}
           <code className="font-mono">.env.local</code> (never the database).
-          Everything else is stored in Supabase.
+          Everything else is stored in Postgres.
         </p>
       </div>
 

@@ -7,7 +7,7 @@ accent_color: teal
 github: https://github.com/bencoton/build-in-public-studio
 deploy_url:
 started: 2026-05-24
-last_updated: 2026-05-26
+last_updated: 2026-05-27
 audience: solo devs and indie hackers shipping in public who want a weekly rhythm without writing every post from scratch
 public: true
 ---
@@ -34,6 +34,9 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 <!-- Reverse-chronological log. Append new bullets at the top with each user-visible change. Each bullet: YYYY-MM-DD — what shipped. -->
 
+- **2026-05-27** — Stage 10.3 shipped: `@anthropic-ai/sdk` bumped from `^0.30.1` → `^0.99.0`. Removed four `as any` casts on `cache_control` (two in `claude.ts`, two in `claude-regenerate.ts`) and two local `Usage` widenings for `cache_read_input_tokens` / `cache_creation_input_tokens` — the SDK now properly types both. Replaced top-level `as const` on the tool definitions with a targeted `type: "object" as const` on each `input_schema.type` field (broad `as const` made `input_schema.required` a readonly tuple that didn't fit the SDK's mutable `string[]`). Also documented that Next.js is on 16.2.6, not 14.x — Vercel has been deploying on Next 16 since the bump landed; the cron test on Stage 9b.4 already ran successfully on it. CLAUDE.md stack line updated.
+- **2026-05-27** — Stage 10.2 shipped: loading skeletons across all routes via a new `Skeleton` primitive in `src/components/ui/skeleton.tsx` (Tailwind `animate-pulse`, no new deps). One `loading.tsx` per route — dashboard, history, notes, settings, debug/commits, debug/draft — each shaped to roughly match its page so the swap from skeleton to real content doesn't reflow. Tiny piggyback: the stale "Everything else is stored in Supabase" line in `src/app/settings/page.tsx` corrected to Postgres.
+- **2026-05-27** — Stage 10.1 shipped: error boundaries. `src/app/error.tsx` renders a friendly "Something went wrong" card with the error message, a Try Again button (calls `reset()`), and a link back to the dashboard. `src/app/global-error.tsx` is the last-resort boundary that catches errors thrown in the root layout itself; uses inline styles only so it renders even if Tailwind / the font pipeline is the thing that broke. Both surface `error.digest` for Vercel log correlation.
 - **2026-05-26** — Stage 9b.4 shipped: Vercel Cron wired up for the Monday-9am weekly generation. New `vercel.json` with `crons: [{ path: "/api/cron/generate", schedule: "0 8 * * 1" }]` (Monday 08:00 UTC = 09:00 UK during BST). New `src/app/api/cron/generate/route.ts` — Node runtime, 60s `maxDuration` (hobby-tier cap), `force-dynamic`, verifies `Authorization: Bearer ${CRON_SECRET}` and returns 401 on mismatch / 500 if the env var isn't set on the server (fail-closed). On success it calls `generateDrafts()`, bumps `last_run_at`, and `revalidatePath("/")` so the dashboard picks up the new moments without a manual refresh. `CRON_SECRET` added to `.env.local.example` with a PowerShell one-liner to generate one. Five stale "Stage 9 scheduler" comments updated to reference the live Vercel Cron path. No dead Stage 9 files to delete — `instrumentation.ts`, `lib/scheduler.ts`, and the related `next.config.mjs` flags were all already removed in the 9b pivot.
 - **2026-05-26** — Stage 9b.3 shipped: app live on Vercel against Neon Postgres. Mid-deploy the DB client was pivoted again from `@supabase/supabase-js` to **`postgres.js`** (direct SQL, tagged template literals, native `Date` objects on `timestamptz` columns) — cleaner, removes a vendor abstraction, gives us real types end-to-end. Four Vercel-only build errors fixed in flight: JSX apostrophe escape, two `cache_control` type casts past `@anthropic-ai/sdk` type-lag, `Usage` field widening for cache tokens, and `Array.from(repos)[0]` for ES2015-target Set iteration. Repo housekeeping: `.gitattributes` enforcing LF line endings (commit `12109a5`), `.claude/` added to `.gitignore`, retired `supabase/` folder removed (schema + RPC + JSON data dumps preserved in `migration-backups/`).
 - **2026-05-25** — Stage 9b.2 shipped: every `src/lib/` DB helper ported from `node:sqlite` to `@supabase/supabase-js`. `db.ts` deleted (zero remaining callers). All `src/app/` server components and server actions updated to await the now-async DB calls. Multi-row transactions (`insertMomentWithDrafts`) handled via a Postgres RPC function in migration `20260525180000_rpc_functions.sql`. Timestamp parser unified into a single `parseTimestamp()` helper that handles both Postgres ISO 8601 with offset and legacy SQLite shapes (the previous one was Invalid-Date-ing on Postgres returns). Ben verified end-to-end: notes round-trip, commits sync, generation, edit / regenerate / approve / reject / Copy+Open / mark-posted, history filters, ratings. Voice-learning loop deferred to user acceptance testing.
@@ -55,13 +58,14 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 ## Up next
 
+**This session:**
+
+1. **Stage 10.4** — Light-mode toggle via `next-themes`. Wrap the root layout in `ThemeProvider`, add a sun/moon toggle in `AppHeader`, verify both themes render cleanly. *In progress (final Stage 10 sub-task).*
+
 **Next session:**
 
-1. **Stage 10** — Polish: light-mode toggle (re-add `next-themes`), loading skeletons, error boundaries, micro-animations. Also bump `@anthropic-ai/sdk` to the latest to drop the three `as any` `cache_control` casts and the local `Usage` widening in `claude.ts` / `claude-regenerate.ts`.
 2. **Phase 1.5a** — Product summaries. Two new generation modes per project: website summary (structured: tagline + paragraphs + feature list) and launch announcement (X thread + IH long-form). Surfaced on a new sidebar item, "Summaries".
 3. **Phase 1.5b** — Batch from previous work + scheduling. Custom time window, generates 10–15 moments, auto-staggers release dates. Trivial on the new stack: a `scheduled_for` column + an hourly Vercel Cron checks the queue.
-
-**Verification still outstanding for Stage 9b.4:** Ben needs to (a) generate a `CRON_SECRET`, (b) add it to `.env.local` and to Vercel's Environment Variables (Production + Preview + Development, marked Sensitive), (c) deploy, (d) trigger the cron URL manually with the Bearer header to confirm it runs, then wait for the first real Monday firing before treating the schedule itself as proven.
 
 **Phase 2 (later):**
 

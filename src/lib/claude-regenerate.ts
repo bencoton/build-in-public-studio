@@ -24,7 +24,7 @@ const REGENERATE_TOOL = {
   name: "submit_variant",
   description: "Submit the redrafted variant.",
   input_schema: {
-    type: "object",
+    type: "object" as const,
     properties: {
       content: {
         type: "string",
@@ -34,7 +34,7 @@ const REGENERATE_TOOL = {
     },
     required: ["content"],
   },
-} as const;
+};
 
 export type RegenerateResult = {
   inputTokens: number;
@@ -118,24 +118,18 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 1024,
-    // `cache_control: { type: "ephemeral" }` is accepted by the API but the
-    // SDK types we're pinned to (@anthropic-ai/sdk ^0.30.1) don't declare it
-    // on TextBlockParam or Tool yet. Cast to any at the per-block level so
-    // we keep the prompt-caching behaviour without bumping the SDK major.
     system: [
       {
         type: "text",
         text: DRAFT_SYSTEM_PROMPT,
         cache_control: { type: "ephemeral" },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+      },
     ],
     tools: [
       {
         ...REGENERATE_TOOL,
         cache_control: { type: "ephemeral" },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+      },
     ],
     tool_choice: { type: "tool", name: REGENERATE_TOOL.name },
     messages: [{ role: "user", content: parts.join("\n") }],
@@ -154,13 +148,7 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
 
   await updateDraftContent(draftId, input.content);
 
-  // Cache token fields exist on the API response but are missing from the
-  // SDK's Usage type at ^0.30.1 (same type-lag as cache_control). Widen the
-  // shape locally so the rest of the typing stays honest.
-  const usage = response.usage as typeof response.usage & {
-    cache_read_input_tokens?: number;
-    cache_creation_input_tokens?: number;
-  };
+  const usage = response.usage;
 
   return {
     inputTokens: usage.input_tokens,

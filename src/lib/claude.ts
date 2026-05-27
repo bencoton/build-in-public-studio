@@ -35,7 +35,7 @@ const DRAFT_TOOL = {
   description:
     "Submit the moments you've identified for this week and their drafted posts. Always call this exactly once.",
   input_schema: {
-    type: "object",
+    type: "object" as const,
     properties: {
       moments: {
         type: "array",
@@ -77,7 +77,7 @@ const DRAFT_TOOL = {
     },
     required: ["moments"],
   },
-} as const;
+};
 
 export type GeneratedMoment = {
   summary: string;
@@ -152,23 +152,18 @@ export async function generateDrafts(): Promise<GenerationResult> {
     max_tokens: 4096,
     // System prompt array form lets us attach cache_control. The string form
     // doesn't support per-block cache control.
-    // `cache_control` is accepted by the API but missing from the SDK types
-    // we're pinned to (@anthropic-ai/sdk ^0.30.1). Per-block `as any` keeps
-    // the prompt-caching behaviour without a major SDK bump.
     system: [
       {
         type: "text",
         text: DRAFT_SYSTEM_PROMPT,
         cache_control: { type: "ephemeral" },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+      },
     ],
     tools: [
       {
         ...DRAFT_TOOL,
         cache_control: { type: "ephemeral" },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+      },
     ],
     tool_choice: { type: "tool", name: DRAFT_TOOL.name },
     messages: [{ role: "user", content: userMessage }],
@@ -202,13 +197,7 @@ export async function generateDrafts(): Promise<GenerationResult> {
     });
   }
 
-  // Cache token fields exist on the API response but are missing from the
-  // SDK's Usage type at ^0.30.1 (same type-lag as cache_control). Widen the
-  // shape locally so the rest of the typing stays honest.
-  const usage = response.usage as typeof response.usage & {
-    cache_read_input_tokens?: number;
-    cache_creation_input_tokens?: number;
-  };
+  const usage = response.usage;
 
   return {
     generationId,
