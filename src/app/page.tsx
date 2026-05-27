@@ -34,13 +34,18 @@ type SearchParams = Record<string, string | string[] | undefined>;
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  // Next 15+/16: searchParams is a Promise that must be awaited (sync
+  // access silently returns undefined on client-side navigations).
+  searchParams: Promise<SearchParams>;
 }) {
-  const moments = await getLatestGeneration();
+  const [moments, params] = await Promise.all([
+    getLatestGeneration(),
+    searchParams,
+  ]);
   const latestAt = moments[0]?.created_at;
 
   const rawProject =
-    typeof searchParams.project === "string" ? searchParams.project : "all";
+    typeof params.project === "string" ? params.project : "all";
   const { tabs, activeKey, filteredMoments } = buildProjectView(
     moments,
     rawProject,

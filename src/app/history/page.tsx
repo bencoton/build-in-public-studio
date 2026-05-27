@@ -31,21 +31,26 @@ const VALID_RATING = ["star", "flop", "neutral", "unrated"] as const;
 export default async function HistoryPage({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  // Next 15+/16: searchParams is a Promise that must be awaited (sync
+  // access silently returns undefined on client-side navigations).
+  searchParams: Promise<SearchParams>;
 }) {
-  const projects = await getProjectsInHistory();
+  const [projects, params] = await Promise.all([
+    getProjectsInHistory(),
+    searchParams,
+  ]);
 
   // Repo filter accepts "all", "general", or any value that appears in `projects`.
   // Anything else (stale URL after a repo got removed, manual hand-typed values)
   // is silently treated as "all" so the page never breaks on a bad search param.
-  const rawRepo = typeof searchParams.repo === "string" ? searchParams.repo : "all";
+  const rawRepo = typeof params.repo === "string" ? params.repo : "all";
   const repoFilter =
     rawRepo === "general" || projects.includes(rawRepo) ? rawRepo : "all";
 
   const filters: Filters = {
-    status: pickEnum(searchParams.status, VALID_STATUS) ?? "all",
-    variant: pickEnum(searchParams.variant, VALID_VARIANT) ?? "all",
-    rating: pickEnum(searchParams.rating, VALID_RATING) ?? "all",
+    status: pickEnum(params.status, VALID_STATUS) ?? "all",
+    variant: pickEnum(params.variant, VALID_VARIANT) ?? "all",
+    rating: pickEnum(params.rating, VALID_RATING) ?? "all",
     repo: repoFilter,
   };
 

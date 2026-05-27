@@ -28,11 +28,16 @@ type SearchParams = Record<string, string | string[] | undefined>;
 export default async function SummariesPage({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  // Next 15+/16: searchParams is a Promise that must be awaited. Accessing
+  // properties synchronously returns undefined and silently breaks the page
+  // on client-side navigations.
+  searchParams: Promise<SearchParams>;
 }) {
-  const watchedRepos = await getWatchedRepos();
-  const rawRepo =
-    typeof searchParams.repo === "string" ? searchParams.repo : "";
+  const [watchedRepos, params] = await Promise.all([
+    getWatchedRepos(),
+    searchParams,
+  ]);
+  const rawRepo = typeof params.repo === "string" ? params.repo : "";
   const activeRepo = watchedRepos.includes(rawRepo) ? rawRepo : "";
 
   let summaries: SummaryRow[] = [];
