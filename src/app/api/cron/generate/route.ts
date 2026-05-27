@@ -1,12 +1,12 @@
 // Stage 9b.4 — weekly generation triggered by Vercel Cron.
 //
-// Schedule lives in vercel.json: "0 8 * * 1" (Monday 08:00 UTC = 09:00 UK
-// during BST, 08:00 UK during GMT). Vercel Cron schedules are UTC-only and
-// don't accept a timezone, so we pick one side of the DST trade and document
-// it. The DB also stores a `schedule_cron` setting that the AppHeader uses to
-// render "Next run: in X" — that one IS timezone-aware (cron-parser with
-// tz: "Europe/London"), so the displayed countdown matches local time year-
-// round even though the actual cron fires at 08:00 UTC.
+// Schedule lives in vercel.json: "0 8 * * 1,4" (Mon + Thu 08:00 UTC = 09:00
+// UK during BST, 08:00 UK during GMT). Vercel Cron schedules are UTC-only
+// and don't accept a timezone, so we pick one side of the DST trade and
+// document it. The DB also stores a `schedule_cron` setting that the
+// AppHeader uses to render "Next run: in X" — that one IS timezone-aware
+// (cron-parser with tz: "Europe/London"), so the displayed countdown matches
+// local time year-round even though the actual cron fires at 08:00 UTC.
 //
 // Auth model: Vercel automatically sets `Authorization: Bearer ${CRON_SECRET}`
 // on the outbound request when the CRON_SECRET env var is set in the project.

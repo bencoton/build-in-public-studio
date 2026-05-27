@@ -35,7 +35,7 @@ export async function AppHeader() {
       <div className="flex items-center gap-4">
         <div
           className="text-xs font-mono"
-          title={`Scheduler timezone: ${SCHEDULER_TIMEZONE}. Vercel Cron fires the weekly generation on Mondays; you can also trigger it manually from the dashboard.`}
+          title={`Scheduler timezone: ${SCHEDULER_TIMEZONE}. Vercel Cron fires the twice-weekly generation on Mondays and Thursdays; you can also trigger it manually from the dashboard.`}
         >
           <span
             className={isMissed ? "text-amber-500" : "text-muted-foreground"}

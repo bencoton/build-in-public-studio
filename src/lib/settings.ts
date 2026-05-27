@@ -61,8 +61,12 @@ export async function setWatchedRepos(repos: string[]): Promise<void> {
   await setSetting("watched_repos", JSON.stringify(repos));
 }
 
-/** Cron expression for the Monday-9am scheduler. Default per the spec. */
-const DEFAULT_SCHEDULE_CRON = "0 9 * * 1";
+/** Cron expression for the twice-weekly generation. Mondays + Thursdays at
+ *  9am Europe/London. The actual Vercel Cron fires at 08:00 UTC Mon+Thu (=
+ *  09:00 UK during BST, 08:00 UK during GMT); the value stored here is the
+ *  user-facing Europe/London expression that the AppHeader passes to
+ *  cron-parser with tz: "Europe/London" for the "Next run" countdown. */
+const DEFAULT_SCHEDULE_CRON = "0 9 * * 1,4";
 
 export async function getScheduleCron(): Promise<string> {
   return (await getSetting("schedule_cron")) ?? DEFAULT_SCHEDULE_CRON;

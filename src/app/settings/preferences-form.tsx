@@ -59,10 +59,11 @@ export function PreferencesForm({
               spellCheck={false}
             />
             <p className="text-xs text-muted-foreground">
-              Default <code className="font-mono">0 9 * * 1</code> = 9am every
-              Monday (Europe/London). Used by the AppHeader to compute &quot;Next
-              run&quot;; the actual Vercel Cron fires from{" "}
-              <code className="font-mono">vercel.json</code> at 08:00 UTC Monday.
+              Default <code className="font-mono">0 9 * * 1,4</code> = 9am every
+              Monday + Thursday (Europe/London). Used by the AppHeader to
+              compute &quot;Next run&quot;; the actual Vercel Cron fires from{" "}
+              <code className="font-mono">vercel.json</code> at 08:00 UTC
+              Mon+Thu.
             </p>
           </div>
 

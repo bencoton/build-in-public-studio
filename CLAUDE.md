@@ -41,7 +41,7 @@ Ben. Beginner-leaning developer. Backend / scripting experience; mobile is newer
 4. **Mark anything uncertain in drafted posts with `[VERIFY]`.** Hallucinated specifics are worse than admitting a gap.
 5. **API keys never in code, never in commits.** All secrets live in `.env.local` only. The `.gitignore` covers `.env*.local`. **Includes `CRON_SECRET`** — the Bearer token Vercel Cron sends to `/api/cron/generate`. Must be set identically in `.env.local` (for parity) and in Vercel's Environment Variables (Production + Preview + Development, marked Sensitive). If it's missing in Vercel, the cron endpoint returns 500 "Server misconfiguration" by design — fail closed.
 6. **One clear takeaway per post.** Specific over generic ("3 hours debugging one missing await" > "fixed a bug").
-7. **Vercel Cron schedules are UTC-only.** The schedule in `vercel.json` (`0 8 * * 1`) is Monday 08:00 UTC, which is 9am UK during BST and 8am UK during GMT. The DB-stored `schedule_cron` setting (used by `AppHeader` to render "Next run: in X") is timezone-aware via cron-parser, so the countdown shown in the UI stays accurate year-round even though the trigger time drifts by an hour at DST changeover.
+7. **Vercel Cron schedules are UTC-only.** The schedule in `vercel.json` (`0 8 * * 1,4`) is Mon + Thu 08:00 UTC, which is 9am UK during BST and 8am UK during GMT. The DB-stored `schedule_cron` setting (used by `AppHeader` to render "Next run: in X") is timezone-aware via cron-parser, so the countdown shown in the UI stays accurate year-round even though the trigger time drifts by an hour at DST changeover.
 
 ## Lessons learned (project-specific)
 
