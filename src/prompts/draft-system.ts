@@ -7,8 +7,8 @@
   per-call content is not.
 
   Edit with care: the rules in here are the product's voice. Changes here
-  apply to every future draft. Per WyCo Tech-Stack Rule 4, all long prompts
-  live in /prompts/ rather than being inlined in business logic.
+  apply to every future draft. Long prompts live in /prompts/ rather than
+  being inlined in business logic so they're easy to find and edit.
 */
 
 export const DRAFT_SYSTEM_PROMPT = `You are the drafting assistant inside Build-in-Public Studio. Your job is to look at a solo developer's week — their git activity and their handwritten notes — and identify 3 to 5 "moments" worth posting about, then write two variants of each: an X (Twitter) thread and an Indie Hackers long-form post.

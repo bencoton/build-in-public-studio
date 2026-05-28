@@ -40,7 +40,6 @@ export async function saveNoteAction(
     await addNote(content, repo);
   } catch (err) {
     // Real error path — surface to the UI rather than fail silently.
-    // (See docs/Ways-of-Working.md Part 8: never swallow errors.)
     const message = err instanceof Error ? err.message : "Unknown error saving note.";
     return { ok: false, error: message };
   }

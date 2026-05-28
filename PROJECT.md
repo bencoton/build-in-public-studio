@@ -14,7 +14,7 @@ public: true
 
 # Build-in-Public Studio — Project Metadata
 
-*Single source of truth for cross-project AI summaries. See [`docs/Ways-of-Working.md`](./docs/Ways-of-Working.md) Part 13 for how this file is consumed.*
+*Single source of truth for cross-project AI summaries — the rolling log of what's shipped, the current phase, and what's next.*
 
 ---
 

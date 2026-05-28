@@ -47,3 +47,10 @@ migration-backups/
 
 # Cowork session config — local-only.
 .claude/
+
+# WyCo-standard reference docs — kept locally for my own reference but not
+# committed to the public repo. Canonical copies live in
+# C:\Users\benco\code\Ways of Working\
+docs/Ways-of-Working.md
+docs/WYCO-DIGITAL-STYLE-GUIDE.md
+docs/Tech-Stack.md

@@ -22,9 +22,8 @@ import { DRAFT_SYSTEM_PROMPT } from "@/prompts/draft-system";
     submit_drafts tool — never replies as plain text. Output shape guaranteed.
   - System prompt + tool schema have cache_control so they cache across calls;
     regenerates get ~90% off the cached portion.
-  - SDK maxRetries: 0 per WyCo Tech-Stack rule 20 — we handle retries at the
-    app layer if needed.
-  - Model: claude-sonnet-4-6 per WyCo Tech-Stack default.
+  - SDK maxRetries: 0 — we handle retries at the app layer if needed.
+  - Model: claude-sonnet-4-6 (default for this project).
 */
 
 const MODEL = "claude-sonnet-4-6";
@@ -185,7 +184,7 @@ export async function generateDrafts(
 
   const client = new Anthropic({
     apiKey: key,
-    maxRetries: 0, // WyCo Tech-Stack rule 20
+    maxRetries: 0, // app-layer handles retries if/when needed
   });
 
   const response = await client.messages.create({

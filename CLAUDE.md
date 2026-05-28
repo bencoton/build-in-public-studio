@@ -6,9 +6,6 @@ Ben. Beginner-leaning developer. Backend / scripting experience; mobile is newer
 
 ## How this project works
 
-- Workflow rules: see [`docs/Ways-of-Working.md`](./docs/Ways-of-Working.md).
-- Tech stack reference: see [`docs/Tech-Stack.md`](./docs/Tech-Stack.md).
-- Visual / brand: see [`docs/WYCO-DIGITAL-STYLE-GUIDE.md`](./docs/WYCO-DIGITAL-STYLE-GUIDE.md).
 - Project metadata + rolling shipped log: see [`PROJECT.md`](./PROJECT.md) at the root.
 - Phased plan for this project: see [`docs/PLAN.md`](./docs/PLAN.md).
 - Session log: append to [`NOTES.md`](./NOTES.md) at the end of every session.
@@ -22,16 +19,16 @@ Ben. Beginner-leaning developer. Backend / scripting experience; mobile is newer
 - **Audience:** solo devs and indie hackers shipping in public. Public from day one.
 - **Visibility:** `public: true` in `PROJECT.md`. The GitHub repo starts private and flips to public when the OSS launch ships (planned for Stage 10).
 
-## Hard rules (load-bearing — full list in docs/Ways-of-Working.md)
+## Hard rules (load-bearing)
 
-1. **Handoff protocol — recommend, don't fight.** When the current request is better served by the OTHER tool, stop, name the handoff, draft the prompt for the other tool, and wait for the user's green light. See `docs/Ways-of-Working.md` Part 2. In practice for this project: Cowork writes docs, prompts, plans, and source code via its file tools; Ben runs every `npm`, `git`, and `gh` command in PowerShell himself.
+1. **Handoff protocol — recommend, don't fight.** When the current request is better served by the OTHER tool, stop, name the handoff, draft the prompt for the other tool, and wait for the user's green light. In practice for this project: Cowork writes docs, prompts, plans, and source code via its file tools; Ben runs every `npm`, `git`, and `gh` command in PowerShell himself.
 2. **Auto-push policy:** after every clean commit (tsc + lint pass), Ben pushes to `origin/main` without further confirmation.
 3. **Always run `git status` and `git log --oneline -5` at the start of every session** before making changes.
-4. **Bug Diagnosis Loop:** when a bug is reported, do NOT propose a fix until the data has narrowed the cause. See `docs/Ways-of-Working.md` Part 7. Never enter a fix-and-pray loop.
+4. **Bug Diagnosis Loop:** when a bug is reported, do NOT propose a fix until the data has narrowed the cause. Never enter a fix-and-pray loop.
 5. **Update PROJECT.md's "Shipped recently" section in the same commit as any user-visible change.**
 6. **When the current phase ships, update `docs/PLAN.md` AND `PROJECT.md`'s "Current phase" in the same commit.**
 7. **100% of code in this project is Claude-generated.** This is not a footnote — it is the credibility hook of the product itself. State this in user-facing copy where natural; never claim Ben hand-wrote code he didn't.
-8. **Ask before adding any new dependency.** Including small ones. The current dep list is in `package.json`; if a new feature wants to add to it, that is an "ask first" event per Ways-of-Working Part 5.
+8. **Ask before adding any new dependency.** Including small ones. The current dep list is in `package.json`; if a new feature wants to add to it, that is an "ask first" event.
 
 ## Project-specific rules
 
@@ -45,7 +42,7 @@ Ben. Beginner-leaning developer. Backend / scripting experience; mobile is newer
 
 ## Lessons learned (project-specific)
 
-*Append below as you diagnose new bugs. Cross-project lessons live in `docs/Ways-of-Working.md` Part 9 — read those first before duplicating.*
+*Append below as you diagnose new bugs.*
 
 ### BIPS-L1 — `npm install` doesn't survive the Cowork sandbox
 

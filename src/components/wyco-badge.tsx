@@ -1,6 +1,5 @@
 // The "by WyCo Digital" badge — appears at the bottom of the sidebar so visitors
-// see the parent brand association on every page. Standard pattern per
-// docs/WYCO-DIGITAL-STYLE-GUIDE.md "by WyCo Digital Badge".
+// see the parent brand association on every page.
 
 export function WycoBadge() {
   return (

@@ -34,7 +34,7 @@ export async function validateAnthropicKey(): Promise<ValidationResult> {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        // claude-haiku-4-5 per docs/Tech-Stack.md "Cheap model".
+        // Cheap model for the smoke-test — we just want to verify the key works.
         model: "claude-haiku-4-5",
         max_tokens: 1,
         messages: [{ role: "user", content: "hi" }],

@@ -1,7 +1,7 @@
 /*
   Read the API-key state from .env.local. Server-side only — these names
   intentionally do NOT start with NEXT_PUBLIC_ because they must never reach
-  the browser (per docs/Ways-of-Working.md "Secrets never in the client").
+  the browser. Server-only access keeps the keys out of the client bundle.
 */
 
 export type KeyStatus = "missing" | "set";

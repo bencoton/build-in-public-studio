@@ -272,8 +272,8 @@ Good PRs to send:
 
 ## Credits
 
-- **Code:** 100% [Claude](https://www.anthropic.com/claude) (Anthropic) under Ben Coton's direction. The full method, lessons learned, and AI-development workflow are documented in [`docs/Ways-of-Working.md`](./docs/Ways-of-Working.md).
-- **Visual brand:** the [WyCo Digital style guide](./docs/WYCO-DIGITAL-STYLE-GUIDE.md).
+- **Code:** 100% [Claude](https://www.anthropic.com/claude) (Anthropic) under Ben Coton's direction. Method, lessons learned, and AI-development workflow notes live in this repo's `CLAUDE.md`, `PROJECT.md`, and `NOTES.md`.
+- **Visual brand:** WyCo Digital — teal primary (`#14b8a6`), slate-900 dark / slate-50 light surfaces, Space Grotesk headings + Inter body + JetBrains Mono code.
 - **Open-source dependencies:** Next.js, React, Tailwind, lucide-react, postgres.js, Octokit, the Anthropic SDK, cron-parser, next-themes. Full list in [`package.json`](./package.json).
 
 ---
