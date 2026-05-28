@@ -59,7 +59,7 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
     throw new Error(`Unknown variant: ${draft.variant}`);
   }
 
-  // source_ref is jsonb — already parsed by Supabase, not a TEXT-of-JSON
+  // source_ref is jsonb — postgres.js parses it for us, not a TEXT-of-JSON
   // string like in the SQLite era. So we just type-check the array shape.
   let sourceRefs: string[] = [];
   if (Array.isArray(moment.source_ref)) {

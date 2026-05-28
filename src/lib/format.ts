@@ -41,7 +41,7 @@ export function relativeFuture(input: string | Date): string {
 
 /**
  * Robust timestamp parser. Handles both:
- *   - Postgres `timestamptz` strings as returned by Supabase, e.g.
+ *   - Postgres `timestamptz` strings as returned by postgres.js, e.g.
  *     "2026-05-25T13:42:00+00:00" — already valid ISO 8601, parses directly.
  *   - Legacy SQLite `CURRENT_TIMESTAMP` strings, e.g. "2026-05-25 13:42:00"
  *     — no T separator, no timezone marker, needs both added.

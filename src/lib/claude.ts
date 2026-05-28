@@ -373,7 +373,7 @@ async function deriveMomentRepo(
     const trimmed = ref.trim();
     if (!trimmed) continue;
 
-    // Try as a note id first (numeric). notes is on Supabase now (Round 1).
+    // Try as a note id first (numeric).
     if (/^\d+$/.test(trimmed)) {
       const note = await getNoteById(Number(trimmed));
       if (note?.repo) repos.add(note.repo);

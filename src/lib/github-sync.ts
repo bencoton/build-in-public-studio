@@ -8,7 +8,7 @@ import { upsertCommit } from "./commits";
 /*
   GitHub commit sync. For each watched repo, fetches commits from the last
   7 days using Octokit's paginate helper (handles multi-page responses for us),
-  then upserts each into the local SQLite cache.
+  then upserts each into the Postgres `commits` table.
 
   Errors are collected per repo rather than thrown, so one bad repo doesn't
   abort the whole sync — common when a fine-grained token lacks access to a
