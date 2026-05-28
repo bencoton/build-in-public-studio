@@ -6,7 +6,7 @@ A self-hosted web app that pulls your GitHub activity and weekly notes, asks Cla
 
 **100% of the code in this repo is Claude-generated.** Every line. That is not a footnote; it is the whole point. See [Why this exists](#why-this-exists).
 
-![Dashboard screenshot](docs/screenshots/dashboard.png)
+![Dashboard screenshot](docs/screenshots/dashboard.jpg)
 
 ---
 
@@ -39,11 +39,11 @@ The other reason it exists is to be a credibility artefact. The whole codebase i
 
 | Dashboard | Batch generation | Summaries |
 |---|---|---|
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Batch form](docs/screenshots/batch.png) | ![Summaries](docs/screenshots/summaries.png) |
+| ![Dashboard](docs/screenshots/dashboard.jpg) | ![Batch form](docs/screenshots/batch.jpg) | ![Summaries](docs/screenshots/summaries.jpg) |
 
-| History with starred posts | Light + dark theme |
-|---|---|
-| ![History](docs/screenshots/history.png) | ![Themes](docs/screenshots/themes.png) |
+| Notes | History with starred posts | Light + dark theme |
+|---|---|---|
+| ![Notes](docs/screenshots/notes.jpg) | ![History](docs/screenshots/history.jpg) | ![Themes](docs/screenshots/themes.jpg) |
 
 ---
 
