@@ -18,10 +18,10 @@ import {
 } from "@/components/dashboard/project-tabs";
 import { ScheduledSection } from "@/components/dashboard/scheduled-section";
 
-// "Generate now" calls generateDrafts() server-side; on a cold container that
-// can take 60–120s. Pro tier caps at 300s; opt in so the action doesn't time
-// out during a manual trigger.
-export const maxDuration = 300;
+// "Generate now" calls generateDrafts() server-side. Two-phase generation
+// in src/lib/claude.ts keeps a cold-start run under 60s, so Hobby tier
+// works without upgrade.
+export const maxDuration = 60;
 
 // The real dashboard. Server-renders the latest generation's moments;
 // each moment card is a client component that owns the edit / regenerate /

@@ -11,9 +11,10 @@ import { getWatchedRepos } from "@/lib/settings";
 
 import { BatchForm } from "./batch-form";
 
-// Server-action-driven Claude generation can take 90–180s on a cold Vercel
-// container. Pro tier caps function execution at 300s; we opt all the way in.
-export const maxDuration = 300;
+// Server-action-driven Claude generation. Two-phase pipeline in
+// src/lib/claude.ts (identify + parallel drafts) keeps wall-clock under
+// 60s even for the batch path's 10-15 moments. Hobby tier compatible.
+export const maxDuration = 60;
 
 export default async function BatchPage() {
   const watchedRepos = await getWatchedRepos();

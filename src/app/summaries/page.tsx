@@ -19,9 +19,9 @@ import { displayProjectName } from "@/lib/format";
 import { WebsiteSummaryCard } from "./website-summary-card";
 import { LaunchSummaryCard } from "./launch-summary-card";
 
-// Server-action-driven Claude calls. Website summary ~30-60s; launch
-// announcement ~60-90s. Pro tier cap is 300s.
-export const maxDuration = 300;
+// Server-action-driven Claude calls. Website summary ~20-30s; launch
+// announcement ~30-50s. Both fit in Hobby's 60s cap.
+export const maxDuration = 60;
 
 type SearchParams = Record<string, string | string[] | undefined>;
 

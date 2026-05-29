@@ -56,7 +56,7 @@ The other reason it exists is to be a credibility artefact. The whole codebase i
 - **Vercel Cron** for the twice-weekly generation schedule
 - **next-themes** for the light/dark toggle
 
-Stateless on the application side. All persistent state lives in Postgres. Designed for **Vercel Pro** ($20/month) because cold-start generation can take up to 120 seconds and Vercel Hobby caps function duration at 60 seconds.
+Stateless on the application side. All persistent state lives in Postgres. **Works on Vercel Hobby (free)** thanks to a two-phase generation pipeline: identifying moments and drafting them are split into separate Claude calls, and the per-moment drafts run in parallel within one function execution. End-to-end cold-start budget is ~35-45s, comfortably inside the 60s Hobby cap.
 
 ---
 
@@ -66,7 +66,7 @@ Estimated time: **20-30 minutes** for someone who's used Vercel before. Longer t
 
 - **GitHub** — for the source repo and the fine-grained PAT
 - **Neon** — Postgres database (free tier covers single-user use comfortably)
-- **Vercel** — hosting + cron (**Pro plan recommended**, $20/month, for the function timeout)
+- **Vercel** — hosting + cron (free Hobby tier works; Pro optional for higher concurrent function limits)
 - **Anthropic** — API access for Claude (pay-as-you-go, ~£10-£30/year at heavy personal use)
 
 ### Step 1 — Fork or clone the repo
@@ -191,12 +191,12 @@ Honest numbers from real personal use:
 
 | Item | Cost |
 |---|---|
-| **Vercel Pro** | $20/month (~£16). Required for the 300s function timeout on cold starts. |
+| **Vercel Hobby** | £0. Free tier covers the cron + the dashboard manual generations. Pro ($20/month) only useful if you're running multiple projects or want higher concurrent function limits. |
 | **Neon free tier** | £0. Covers single-user load with miles of headroom. |
-| **Anthropic API** | ~£10–£20/year at heavy use. Weekly cron: ~£0.05–£0.10 per fire (Mon + Thu = ~£10/year). Batch generations: £0.20–£0.60 each, occasional. |
+| **Anthropic API** | ~£15–£35/year at heavy use. Two-phase generation makes ~6 Claude calls per fire (1 identify + 5 parallel drafts) instead of 1, so per-run cost rose ~30% vs the original single-call architecture — but the per-call output tokens are the same. Mon + Thu weekly = ~£10-£15/year. Batch generations: £0.30–£0.80 each, occasional. |
 | **GitHub** | £0. Free PAT. |
 
-**Total: ~£200/year** if you run it personally. Most of that is Vercel Pro. If you're already on Vercel Pro for something else, marginal cost is ~£10-£30/year in Anthropic credit.
+**Total: ~£15–£35/year** for personal heavy use. The only meaningful cost is Anthropic credit; everything else runs on free tiers.
 
 ---
 
@@ -219,21 +219,38 @@ Honest numbers from real personal use:
             │             │             │
             └─────────────┼─────────────┘
                           ▼
-                  Claude tool_use call
-                  (system prompt cached,
-                   3-5 moments per fire,
-                   ~£0.05-0.10 per fire)
+            ┌─────────────────────────────┐
+            │  Phase 1: identifyMoments() │
+            │  One Claude call, ~15s,     │
+            │  returns N moment summaries │
+            │  + source refs. Writes the  │
+            │  prompt cache.              │
+            └─────────────────────────────┘
+                          │
+                          ▼
+            ┌─────────────────────────────┐
+            │  Phase 2: draftMoment()     │
+            │  N parallel Claude calls,   │
+            │  one per moment, each       │
+            │  ~10-15s. All read from the │
+            │  cache written in Phase 1.  │
+            │  Wall-clock: ~15s.          │
+            └─────────────────────────────┘
                           │
                           ▼
                   Persist moments + drafts
-                  to Postgres
+                  to Postgres (~3s)
                           │
                           ▼
                   Dashboard reflects new
                   moments on next page load
 ```
 
-Architecturally simple. The complexity is in the prompting: the system prompt enforces voice rules (banned words, "100% Claude-generated" framing, `[VERIFY]` markers for uncertain claims), and starred history drafts are sampled as voice examples on every call.
+End-to-end: ~35-45s cold start, ~25-30s warm. Fits in Vercel Hobby's 60s function cap.
+
+The two-phase split is what makes Hobby work: a single Sonnet call to identify and draft 5 moments takes ~95s and times out, but splitting into "identify" (small structured output) + "draft each in parallel" (one call per moment, all firing concurrently) keeps the wall-clock under 60s while preserving Sonnet quality.
+
+The complexity is in the prompting: the system prompt enforces voice rules (banned words, "100% Claude-generated" framing, `[VERIFY]` markers for uncertain claims), and starred history drafts are sampled as voice examples on every call.
 
 ---
 

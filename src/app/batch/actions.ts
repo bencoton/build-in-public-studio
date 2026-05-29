@@ -51,7 +51,6 @@ export async function batchGenerateAction(args: {
       windowDays: args.windowDays,
       maxMoments: args.maxMoments,
       repoFilter: args.repoFilter,
-      maxOutputTokens: 16384,
       scheduling: { startDate },
     });
     // Surface fresh moments on the dashboard's "Scheduled" section immediately.
