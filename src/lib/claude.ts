@@ -252,10 +252,37 @@ export async function generateDrafts(
     };
   }
 
-  // ── Phase 2: parallel draft generation ────────────────────────────────
-  const draftResults = await Promise.all(
-    identifyResult.moments.map((moment) => draftMoment(moment, context)),
+  // ── Phase 2: serialize-then-parallel draft generation ────────────────
+  // We serialize the FIRST draft call to prime Anthropic's prompt cache,
+  // then parallel-fan the remaining N-1 calls so they all hit a warm cache.
+  //
+  // Why: parallel calls firing within ~100ms of each other beat the
+  // cache-write commit at Anthropic's side, so each one sees a cold cache
+  // and pays full input-token price. Empirically (2026-05-29 test):
+  // pure parallel → cacheRead = 0 across all calls, $0.12/fire.
+  // Serialize-then-parallel → calls 2..N hit the warm cache, ~$0.07/fire.
+  //
+  // Wall-clock impact: identify (~15s) + first draft (~15s) + parallel rest
+  // (~15s) = ~45s. Same budget as pure parallel, much better economics.
+  const draftResults: Array<{
+    drafts: { x_thread: string; ih_long: string };
+    usage: AnthropicUsage;
+  }> = [];
+
+  // First call — primes the cache for the rest.
+  draftResults.push(
+    await draftMoment(identifyResult.moments[0], context),
   );
+
+  // Remaining calls — parallel, all read from the cache the first call wrote.
+  if (identifyResult.moments.length > 1) {
+    const rest = await Promise.all(
+      identifyResult.moments
+        .slice(1)
+        .map((moment) => draftMoment(moment, context)),
+    );
+    draftResults.push(...rest);
+  }
 
   // ── Persist ────────────────────────────────────────────────────────────
   const scheduledDates =
