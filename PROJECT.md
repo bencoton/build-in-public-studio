@@ -7,7 +7,7 @@ accent_color: teal
 github: https://github.com/bencoton/build-in-public-studio
 deploy_url:
 started: 2026-05-24
-last_updated: 2026-05-27
+last_updated: 2026-06-04
 audience: solo devs and indie hackers shipping in public who want a weekly rhythm without writing every post from scratch
 public: true
 ---
