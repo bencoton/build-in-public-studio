@@ -9,6 +9,7 @@ import {
   getReposForShaPrefix,
   type CommitRow,
 } from "./commits";
+import { syncWatchedRepos } from "./github-sync";
 import { insertMomentWithDrafts } from "./moments";
 import { getStarredExamples, type HistoryDraft } from "./history";
 import { stagger } from "./scheduling";
@@ -184,6 +185,16 @@ export async function generateDrafts(
   const key = getAnthropicKey();
   if (!key) {
     throw new Error("ANTHROPIC_API_KEY is not set. Configure it in Settings first.");
+  }
+
+  // ── Sync GitHub before reading commits ───────────────────────────────────
+  // Always pull latest commits from GitHub first so both the manual "Generate"
+  // button and the Vercel Cron path work without a separate sync step.
+  // Sync errors are logged but non-fatal — we proceed with whatever is in DB.
+  try {
+    await syncWatchedRepos();
+  } catch (err) {
+    console.warn("[generateDrafts] GitHub sync failed, proceeding with cached commits:", err);
   }
 
   // ── Load inputs in parallel ───────────────────────────────────────────
