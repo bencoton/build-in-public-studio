@@ -9,6 +9,7 @@ import { Sparkles } from "lucide-react";
 
 import { getLatestGeneration, type MomentWithDrafts } from "@/lib/moments";
 import { relativeTime, displayProjectName } from "@/lib/format";
+import { getWatchedRepos } from "@/lib/settings";
 
 import { GenerateNowButton } from "@/components/dashboard/generate-now-button";
 import { MomentCard } from "@/components/dashboard/moment-card";
@@ -38,8 +39,9 @@ export default async function DashboardPage({
   // access silently returns undefined on client-side navigations).
   searchParams: Promise<SearchParams>;
 }) {
-  const [moments, params] = await Promise.all([
+  const [moments, watchedRepos, params] = await Promise.all([
     getLatestGeneration(),
+    getWatchedRepos(),
     searchParams,
   ]);
   const latestAt = moments[0]?.created_at;
@@ -81,7 +83,7 @@ export default async function DashboardPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <GenerateNowButton />
+          <GenerateNowButton repos={watchedRepos} />
         </CardContent>
       </Card>
 

@@ -205,7 +205,9 @@ export async function generateDrafts(
 
   if (repoFilter) {
     commits = commits.filter((c) => c.repo === repoFilter);
-    notes = notes.filter((n) => n.repo === repoFilter);
+    // Include notes linked to this repo OR unlinked notes (repo=null) — unlinked
+    // notes are general observations that should appear in every repo's generation.
+    notes = notes.filter((n) => n.repo === repoFilter || n.repo === null);
   }
 
   if (commits.length === 0 && notes.length === 0) {

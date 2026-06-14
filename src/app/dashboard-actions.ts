@@ -11,7 +11,7 @@ import {
 import { fromLocalDateString } from "@/lib/scheduling";
 import { regenerateDraft, type RegenerateResult } from "@/lib/claude-regenerate";
 import { generateDrafts, type GenerationResult } from "@/lib/claude";
-import { syncWatchedRepos } from "@/lib/github-sync";
+import { syncWatchedRepos, syncOneRepo } from "@/lib/github-sync";
 import { markDraftAsPosted } from "@/lib/posting";
 import { setLastRunAt } from "@/lib/settings";
 
@@ -127,6 +127,38 @@ export async function markPostedAction(
   }
   revalidatePath("/");
   return { ok: true };
+}
+
+// ── Generate + sync for one repo (per-repo orchestration) ────────────────
+//
+// The client calls this once per watched repo. Each call:
+//   1. Syncs that repo's commits from GitHub into the DB
+//   2. Runs generateDrafts() filtered to that repo (+ unlinked notes)
+//   3. Updates last_run_at and revalidates the dashboard
+//
+// Keeping it per-repo means each server action call easily fits inside the
+// Vercel Hobby 60s function limit (~5-15s sync + ~35-45s generation).
+
+export async function generateForRepoAction(repo: string): Promise<GenerateActionResult> {
+  try {
+    // Sync this repo's commits first — non-fatal if it fails.
+    try {
+      const syncResult = await syncOneRepo(repo);
+      if (!syncResult.ok) {
+        console.warn(`[generateForRepoAction] Sync failed for ${repo}:`, syncResult.error);
+      }
+    } catch (syncErr) {
+      console.warn(`[generateForRepoAction] Sync threw for ${repo}:`, syncErr);
+    }
+
+    const result = await generateDrafts({ repoFilter: repo });
+    await setLastRunAt(new Date().toISOString());
+    revalidatePath("/");
+    return { ok: true, result };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    return { ok: false, error: message };
+  }
 }
 
 // ── Generate the full weekly batch from the dashboard ────────────────────

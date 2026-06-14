@@ -13,19 +13,19 @@
 // We reject anything else with 401. Without this gate the endpoint is a
 // public unauthenticated trigger for a paid Claude call.
 //
-// Runtime: Node, because Anthropic SDK + Octokit + postgres.js all need Node.
-// maxDuration: 60s — the Vercel Hobby-tier cap. Two-phase generation in
-// src/lib/claude.ts (identifyMoments + parallel draftMoment) keeps the
-// wall-clock budget under 60s even on a cold start: ~15s identify + ~15s
-// parallel drafts + DB writes + cold-start overhead = ~35-45s typical.
-// Self-hosters on Vercel Hobby (free tier) can run this without upgrading.
+// Architecture: per-repo sync + generation, same as the dashboard button.
+// Each repo is processed in sequence: sync from GitHub, then generateDrafts()
+// filtered to that repo. This keeps each round-trip well under 60s.
+// The cron endpoint itself has a longer effective budget because it's a route
+// handler (not a server action), but we keep the pattern identical to the
+// dashboard so the two paths stay in sync.
 
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 
 import { generateDrafts } from "@/lib/claude";
-import { syncWatchedRepos } from "@/lib/github-sync";
-import { setLastRunAt } from "@/lib/settings";
+import { syncOneRepo } from "@/lib/github-sync";
+import { getWatchedRepos, setLastRunAt } from "@/lib/settings";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -46,8 +46,6 @@ export async function GET(request: Request) {
 
   const auth = request.headers.get("authorization");
   if (auth !== `Bearer ${expected}`) {
-    // Generic 401. Don't echo what was expected vs received — that would
-    // turn this into an oracle for guessing the secret.
     return NextResponse.json(
       { ok: false, error: "Unauthorised." },
       { status: 401 },
@@ -55,50 +53,50 @@ export async function GET(request: Request) {
   }
 
   const triggeredAt = new Date().toISOString();
+  const repos = await getWatchedRepos();
 
-  try {
-    // Sync GitHub first — capped at 10s so sync + generation stays under the
-    // 60s Vercel Hobby function limit. Non-fatal: if it times out or errors
-    // we proceed with whatever commits are already in the DB.
-    try {
-      await Promise.race([
-        syncWatchedRepos(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("sync timeout")), 10_000),
-        ),
-      ]);
-    } catch (syncErr) {
-      console.warn("[cron/generate] GitHub sync failed/timed out:", syncErr);
-    }
-    const result = await generateDrafts();
-    // Treat cron-triggered runs and dashboard-triggered runs the same: both
-    // bump `last_run_at` so the AppHeader's "Last run" label is meaningful
-    // regardless of source. Mirrors generateAllDraftsAction() in
-    // src/app/dashboard-actions.ts.
-    await setLastRunAt(triggeredAt);
-    // If a user happens to open the dashboard right after a cron run, this
-    // ensures they see the fresh moments without a manual refresh.
-    revalidatePath("/");
-
+  if (repos.length === 0) {
     return NextResponse.json({
       ok: true,
       triggeredAt,
-      generationId: result.generationId,
-      momentCount: result.momentCount,
-      tokens: {
-        input: result.inputTokens,
-        output: result.outputTokens,
-        cacheRead: result.cacheReadTokens,
-        cacheCreation: result.cacheCreationTokens,
-      },
+      message: "No watched repos configured — nothing to generate.",
+      repos: [],
     });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    // Full stack only goes to the server logs, never the response body.
-    console.error("[cron/generate] generation failed:", err);
-    return NextResponse.json(
-      { ok: false, triggeredAt, error: message },
-      { status: 500 },
-    );
   }
+
+  const repoResults = [];
+  let totalMoments = 0;
+
+  for (const repo of repos) {
+    // Sync first — non-fatal if it fails.
+    try {
+      const syncResult = await syncOneRepo(repo);
+      if (!syncResult.ok) {
+        console.warn(`[cron/generate] Sync failed for ${repo}:`, syncResult.error);
+      }
+    } catch (syncErr) {
+      console.warn(`[cron/generate] Sync threw for ${repo}:`, syncErr);
+    }
+
+    // Generate for this repo.
+    try {
+      const result = await generateDrafts({ repoFilter: repo });
+      totalMoments += result.momentCount;
+      repoResults.push({ repo, ok: true, momentCount: result.momentCount });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      console.error(`[cron/generate] Generation failed for ${repo}:`, err);
+      repoResults.push({ repo, ok: false, error: message });
+    }
+  }
+
+  await setLastRunAt(triggeredAt);
+  revalidatePath("/");
+
+  return NextResponse.json({
+    ok: true,
+    triggeredAt,
+    totalMoments,
+    repos: repoResults,
+  });
 }

@@ -36,6 +36,65 @@ export type SyncSummary = {
 };
 
 /**
+ * Sync a single repo by full name ("owner/repo"). Extracted so callers can
+ * sync one project at a time rather than all at once, keeping each operation
+ * within the Vercel Hobby 60s function budget.
+ */
+export async function syncSingleRepo(
+  fullName: string,
+  octokit: Octokit,
+  since: string,
+  startedAt: string,
+): Promise<RepoSyncResult> {
+  const [owner, repo] = fullName.split("/");
+  if (!owner || !repo) {
+    return {
+      repo: fullName,
+      ok: false,
+      error: `Invalid repo name "${fullName}" — expected "owner/repo".`,
+    };
+  }
+  try {
+    const commits = await octokit.paginate(
+      octokit.rest.repos.listCommits,
+      { owner, repo, since, per_page: 100 },
+    );
+    let inserted = 0;
+    for (const c of commits) {
+      const committedAt =
+        c.commit.committer?.date ?? c.commit.author?.date ?? startedAt;
+      const wasNew = await upsertCommit(
+        fullName,
+        c.sha,
+        c.commit.message ?? "",
+        committedAt,
+        null,
+      );
+      if (wasNew) inserted++;
+    }
+    return { repo: fullName, ok: true, fetched: commits.length, inserted };
+  } catch (err) {
+    return toErrorResult(fullName, err);
+  }
+}
+
+/**
+ * Public entry point for syncing a single repo by name. Creates its own
+ * Octokit instance so callers don't need to manage token retrieval.
+ * Used by the per-repo server action so each call stays under 60s.
+ */
+export async function syncOneRepo(fullName: string): Promise<RepoSyncResult> {
+  const token = getGithubToken();
+  if (!token) {
+    return { repo: fullName, ok: false, error: "GITHUB_TOKEN is not set. Configure it in Settings first." };
+  }
+  const octokit = new Octokit({ auth: token });
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const startedAt = new Date().toISOString();
+  return syncSingleRepo(fullName, octokit, since, startedAt);
+}
+
+/**
  * Sync all watched repos. Pulls commits from the last 7 days; idempotent
  * thanks to the (repo, sha) UNIQUE constraint.
  */
@@ -59,57 +118,11 @@ export async function syncWatchedRepos(): Promise<SyncSummary> {
   }
 
   const octokit = new Octokit({ auth: token });
-  // GitHub commits API expects ISO timestamps with timezone.
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const results: RepoSyncResult[] = [];
-
-  for (const fullName of watched) {
-    const [owner, repo] = fullName.split("/");
-    if (!owner || !repo) {
-      results.push({
-        repo: fullName,
-        ok: false,
-        error: `Invalid repo name "${fullName}" — expected "owner/repo".`,
-      });
-      continue;
-    }
-
-    try {
-      // octokit.paginate flattens all pages into a single array.
-      const commits = await octokit.paginate(
-        octokit.rest.repos.listCommits,
-        { owner, repo, since, per_page: 100 },
-      );
-
-      let inserted = 0;
-      for (const c of commits) {
-        // The list endpoint doesn't include file counts — those need a per-commit
-        // call which would multiply our API usage. Leave null for now; Stage 5
-        // can fetch counts for just the commits Claude picks as moments.
-        const committedAt =
-          c.commit.committer?.date ?? c.commit.author?.date ?? startedAt;
-        const message = c.commit.message ?? "";
-        const wasNew = await upsertCommit(
-          fullName,
-          c.sha,
-          message,
-          committedAt,
-          null,
-        );
-        if (wasNew) inserted++;
-      }
-
-      results.push({
-        repo: fullName,
-        ok: true,
-        fetched: commits.length,
-        inserted,
-      });
-    } catch (err) {
-      results.push(toErrorResult(fullName, err));
-    }
-  }
+  const results: RepoSyncResult[] = await Promise.all(
+    watched.map((fullName) => syncSingleRepo(fullName, octokit, since, startedAt)),
+  );
 
   return {
     startedAt,
