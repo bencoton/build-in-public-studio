@@ -9,7 +9,7 @@
 // The client orchestrates them sequentially and shows per-repo progress.
 
 import { useEffect, useState } from "react";
-import { Sparkles, Loader2, Check, AlertCircle } from "lucide-react";
+import { Sparkles, Loader2, Check } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -119,7 +119,7 @@ export function GenerateNowButton({ repos }: Props) {
                   <Check className="size-3 text-wyco-teal" />
                 )}
                 {s.state === "done" && !s.result.ok && (
-                  <AlertCircle className="size-3 text-destructive" />
+                  <span className="size-3 text-muted-foreground leading-none">–</span>
                 )}
                 <span>{repo}</span>
                 {s.state === "done" && s.result.ok && (
@@ -129,7 +129,7 @@ export function GenerateNowButton({ repos }: Props) {
                   </span>
                 )}
                 {s.state === "done" && !s.result.ok && (
-                  <span className="text-destructive">{s.result.error}</span>
+                  <span className="text-muted-foreground">{s.result.error}</span>
                 )}
               </li>
             );

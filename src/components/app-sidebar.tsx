@@ -12,6 +12,7 @@ import {
   NotebookPen,
   Settings,
   CalendarRange,
+  CalendarClock,
   FileText,
 } from "lucide-react";
 
@@ -20,6 +21,7 @@ import { WycoBadge } from "@/components/wyco-badge";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/scheduled", label: "Scheduled", icon: CalendarClock },
   { href: "/batch", label: "Batch", icon: CalendarRange },
   { href: "/summaries", label: "Summaries", icon: FileText },
   { href: "/history", label: "History", icon: History },

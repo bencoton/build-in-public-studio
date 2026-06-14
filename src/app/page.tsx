@@ -17,7 +17,6 @@ import {
   ProjectTabs,
   type ProjectTab,
 } from "@/components/dashboard/project-tabs";
-import { ScheduledSection } from "@/components/dashboard/scheduled-section";
 
 // "Generate now" calls generateDrafts() server-side. Two-phase generation
 // in src/lib/claude.ts keeps a cold-start run under 60s, so Hobby tier
@@ -86,12 +85,6 @@ export default async function DashboardPage({
           <GenerateNowButton repos={watchedRepos} />
         </CardContent>
       </Card>
-
-      {/* Scheduled-for-the-next-7-days lives between the Generate panel and
-          the latest generation. Pulls from the dashboard live query — no
-          background cron required (Phase 1.5b decision). Renders nothing if
-          no scheduled drafts are due. */}
-      <ScheduledSection />
 
       {moments.length === 0 ? (
         <Card>
