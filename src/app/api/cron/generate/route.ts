@@ -57,11 +57,18 @@ export async function GET(request: Request) {
   const triggeredAt = new Date().toISOString();
 
   try {
-    // Sync GitHub first — non-fatal if it fails, we proceed with cached commits.
+    // Sync GitHub first — capped at 10s so sync + generation stays under the
+    // 60s Vercel Hobby function limit. Non-fatal: if it times out or errors
+    // we proceed with whatever commits are already in the DB.
     try {
-      await syncWatchedRepos();
+      await Promise.race([
+        syncWatchedRepos(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("sync timeout")), 10_000),
+        ),
+      ]);
     } catch (syncErr) {
-      console.warn("[cron/generate] GitHub sync failed:", syncErr);
+      console.warn("[cron/generate] GitHub sync failed/timed out:", syncErr);
     }
     const result = await generateDrafts();
     // Treat cron-triggered runs and dashboard-triggered runs the same: both

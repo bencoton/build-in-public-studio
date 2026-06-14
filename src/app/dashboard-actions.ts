@@ -133,11 +133,18 @@ export async function markPostedAction(
 
 export async function generateAllDraftsAction(): Promise<GenerateActionResult> {
   try {
-    // Sync GitHub first — non-fatal if it fails, we proceed with cached commits.
+    // Sync GitHub first — capped at 10s so sync + generation stays under the
+    // 60s Vercel Hobby function limit. Non-fatal: if it times out or errors
+    // we proceed with whatever commits are already in the DB.
     try {
-      await syncWatchedRepos();
+      await Promise.race([
+        syncWatchedRepos(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("sync timeout")), 10_000),
+        ),
+      ]);
     } catch (syncErr) {
-      console.warn("[generateAllDraftsAction] GitHub sync failed:", syncErr);
+      console.warn("[generateAllDraftsAction] GitHub sync failed/timed out:", syncErr);
     }
     const result = await generateDrafts();
     // Record this as the "last run" so the header updates whether the
