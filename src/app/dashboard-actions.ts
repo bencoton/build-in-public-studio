@@ -11,6 +11,7 @@ import {
 import { fromLocalDateString } from "@/lib/scheduling";
 import { regenerateDraft, type RegenerateResult } from "@/lib/claude-regenerate";
 import { generateDrafts, type GenerationResult } from "@/lib/claude";
+import { syncWatchedRepos } from "@/lib/github-sync";
 import { markDraftAsPosted } from "@/lib/posting";
 import { setLastRunAt } from "@/lib/settings";
 
@@ -132,6 +133,12 @@ export async function markPostedAction(
 
 export async function generateAllDraftsAction(): Promise<GenerateActionResult> {
   try {
+    // Sync GitHub first — non-fatal if it fails, we proceed with cached commits.
+    try {
+      await syncWatchedRepos();
+    } catch (syncErr) {
+      console.warn("[generateAllDraftsAction] GitHub sync failed:", syncErr);
+    }
     const result = await generateDrafts();
     // Record this as the "last run" so the header updates whether the
     // trigger was cron or a manual click — semantics: time of last

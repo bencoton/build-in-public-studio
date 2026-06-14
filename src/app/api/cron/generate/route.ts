@@ -24,6 +24,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 
 import { generateDrafts } from "@/lib/claude";
+import { syncWatchedRepos } from "@/lib/github-sync";
 import { setLastRunAt } from "@/lib/settings";
 
 export const runtime = "nodejs";
@@ -56,6 +57,12 @@ export async function GET(request: Request) {
   const triggeredAt = new Date().toISOString();
 
   try {
+    // Sync GitHub first — non-fatal if it fails, we proceed with cached commits.
+    try {
+      await syncWatchedRepos();
+    } catch (syncErr) {
+      console.warn("[cron/generate] GitHub sync failed:", syncErr);
+    }
     const result = await generateDrafts();
     // Treat cron-triggered runs and dashboard-triggered runs the same: both
     // bump `last_run_at` so the AppHeader's "Last run" label is meaningful
