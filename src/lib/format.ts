@@ -13,6 +13,22 @@ export function displayProjectName(fullName: string): string {
 }
 
 /**
+ * Human label for a draft variant. Reddit drafts show their target sub
+ * ("r/SaaS"); X and IH keep their platform names. Used anywhere a draft's
+ * platform is shown (history, scheduled list, voice-example formatter) so the
+ * three variants render consistently and reddit never gets mislabelled.
+ */
+export function variantLabel(
+  variant: string,
+  subreddit?: string | null,
+): string {
+  if (variant === "x_thread") return "X thread";
+  if (variant === "ih_long") return "Indie Hackers";
+  if (variant === "reddit") return subreddit ? `r/${subreddit}` : "Reddit";
+  return variant;
+}
+
+/**
  * "in 3 hours" / "in 2 days" formatter — the symmetric counterpart to
  * relativeTime() below. Used by the dashboard header to show "Next run: in X".
  * Returns the absolute date for anything more than ~5 weeks out.

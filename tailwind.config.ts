@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import tailwindcssAnimate from "tailwindcss-animate";
 
 // WyCo-flavoured shadcn/ui Tailwind config.
 // Colour tokens come from CSS variables in src/app/globals.css.
@@ -105,6 +106,6 @@ const config: Config = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [tailwindcssAnimate],
 };
 export default config;

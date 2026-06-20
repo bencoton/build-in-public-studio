@@ -7,9 +7,17 @@ accent_color: teal
 github: https://github.com/bencoton/build-in-public-studio
 deploy_url: https://build-in-public-studio.vercel.app
 started: 2026-05-24
-last_updated: 2026-06-04
+last_updated: 2026-06-20
 audience: solo devs and indie hackers shipping in public who want a weekly rhythm without writing every post from scratch
 public: true
+# Portfolio Dashboard — auto-read by ../portfolio-dashboard/scripts/build-projects.mjs (run `npm run sync`)
+stage: iteration                # discovery|planning|design|development|testing|deployment|monitoring|iteration
+dashboard_status: active        # active|paused|exploring|backburner|shipped
+summary: "Turns your week's git commits and notes into ready-to-ship build-in-public posts (X threads, Indie Hackers) with Claude — copy-and-post, human stays in the loop."
+wow_alignment: "Aligned — migrated to Neon; Doppler secrets; Vercel Cron drives weekly generation."
+live_url: https://build-in-public-studio.vercel.app
+vercel_url: https://vercel.com/dashboard
+neon_url: https://console.neon.tech
 ---
 
 # Build-in-Public Studio — Project Metadata
@@ -26,6 +34,8 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 ## Current phase
 
+**Phase 1.5c — Reddit drafting: complete (2026-06-20).** Reddit is now a first-class third platform in the moment→draft flow (per-sub tailored journey drafts, pre-post checklists, Copy + Open to each sub, history + voice-learning parity). Schema migration `0004` Part A is applied to Neon; Part B (citation tracking, Phase 2.5) is intentionally deferred until after the OSS launch. **Next up: Phase 2 — OSS launch** (flip the repo public, polish the README, draft the launch posts with the tool itself, rotate secrets). The earlier phases below remain accurate context.
+
 **Phase 1b — Tech stack migration: complete.** Stages 9b.1 → 9b.4 shipped. App lives on Vercel against Neon Postgres via the `postgres.js` client (transaction-mode pooler, `prepare: false`). Weekly generation is triggered by **Vercel Cron** firing `/api/cron/generate` every Monday at 08:00 UTC (= 09:00 UK during BST), gated by a `CRON_SECRET` Bearer header. The dashboard's manual "Generate now" button calls the same `generateDrafts()` pipeline, so cron-triggered and manual runs are interchangeable. Supabase config retired, `supabase/` folder removed from the repo (a one-time backup of schema + RPC functions + JSON data dumps lives in `migration-backups/build-in-public-studio/`). **Next up: Stage 10 polish** (light-mode toggle, loading skeletons, error boundaries, SDK upgrade to remove type-lag casts), then Phase 1.5 features.
 
 ---
@@ -34,6 +44,7 @@ A local web dashboard that pulls your week's GitHub activity and weekly notes, a
 
 <!-- Reverse-chronological log. Append new bullets at the top with each user-visible change. Each bullet: YYYY-MM-DD — what shipped. -->
 
+- **2026-06-20** — **Phase 1.5c shipped: Reddit drafting (third platform).** Each moment card now has a Reddit section: pick up to 3 target subreddits (r/SaaS, r/indiehackers, r/SideProject, r/microsaas) and generate a separately-tailored journey-format draft per sub. Each draft shows its title (with copy button), the sub's pre-post self-promo checklist (so drafts don't trip mod filters), and the same edit / regenerate / approve / reject / Copy + Open flow as X and IH — Copy + Open targets that sub's `…/submit` page. Reddit drafts flow through `/history` (platform filter now includes Reddit) and voice learning (starred Reddit drafts feed future Reddit generation). Subreddit tone + rules live as a versioned config in `src/lib/reddit-subs.ts` — no runtime scraping. New `submit_reddit_draft` tool + `draftRedditForSub()` / `generateRedditDrafts()` in `claude.ts` (one Claude call per moment×sub, parallel, reusing the cached system prompt). Schema: migration `0004` Part A — `drafts.variant` gains `reddit`, plus new `subreddit` (curated-slug CHECK + variant↔subreddit consistency CHECK) and `title` columns. Never auto-posts — Copy + Open only. No new npm dependency.
 - **2026-06-14** — **Scheduled page + generate UI polish.** Moved "Scheduled for the next 7 days" off the dashboard into a dedicated `/scheduled` page (60-day window, empty state, loading skeleton). Added "Scheduled" to the sidebar nav between Dashboard and Batch. Repos with no commits in the generate panel now show a neutral muted style instead of a red error indicator — no commits is a valid result, not a failure.
 - **2026-06-14** — **Per-repo Generate architecture.** The dashboard's "Generate now" button now fires one server action call per watched repo (sync GitHub → generate for that repo), instead of one monolithic call that was hitting Vercel Hobby's 60s limit. Each call comfortably fits in ~50s max. The Vercel Cron endpoint mirrors the same pattern for consistency. New `syncOneRepo(fullName)` public entry point in `github-sync.ts` (creates its own Octokit instance; internal `syncSingleRepo` helper refactored for shared use). New `generateForRepoAction(repo)` server action in `dashboard-actions.ts`. Fixed note-filter bug in `claude.ts`: unlinked notes (`repo = null`) are now included in every repo's generation pass instead of being dropped. The Generate panel shows per-repo progress rows with sync → draft status in real time. Removed diagnostic `/api/health` route (confirmed DB healthy).
 
@@ -102,3 +113,21 @@ Nothing to measure yet. Once the app is in use weekly, candidate metrics: drafts
 ## Notes for the AI agent
 
 When this project ships its first user-visible feature, surface that prominently — the OSS-from-day-one credibility loop matters more than incremental polish. Always link to the GitHub repo in posts about this project; the source being visible is half the story.
+
+---
+
+## Dashboard (portfolio command deck)
+
+*Auto-read by the WyCo Portfolio Dashboard (`scripts/build-projects.mjs` → `projects.js`). The scalar fields — status, summary, WoW note, **stage**, and service links — live in this file's **frontmatter** (above); the phase roadmap + outstanding tests below are parsed from here. Run `npm run sync` in `portfolio-dashboard` (or let the Sunday sweep refresh it). Never hand-edit the dashboard.*
+
+- **phases** (exactly one `current`):
+  1. [done] Scaffolding — Project + deploy baseline.
+  2. [done] Local MVP — Draft posts from local activity.
+  3. [done] Tech-stack migration — SQLite → Supabase → Neon; Next 16.
+  4. [done] Summaries / batch / scheduling — Batch drafts + Vercel Cron.
+  5. [done] Polish pass — Light theme + UI polish before OSS.
+  6. [done] Reddit drafting — Per-sub Reddit as a third platform.
+  7. [current] OSS launch — Flip the repo public.
+  8. [todo] Multi-AI transcript ingest — Ingest other AI chat logs.
+  9. [todo] Hosted SaaS — Multi-user hosted version.
+- **outstanding_tests:** none

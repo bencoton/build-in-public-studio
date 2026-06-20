@@ -13,7 +13,7 @@ import {
   type DraftRating,
 } from "@/lib/history";
 import type { DraftStatus } from "@/lib/draft-mutations";
-import { relativeTime, displayProjectName } from "@/lib/format";
+import { relativeTime, displayProjectName, variantLabel } from "@/lib/format";
 
 import { HistoryFilters } from "./filters";
 import { RatingButtons } from "./rating-buttons";
@@ -25,7 +25,7 @@ import { RatingButtons } from "./rating-buttons";
 type SearchParams = Record<string, string | string[] | undefined>;
 
 const VALID_STATUS: DraftStatus[] = ["draft", "approved", "posted", "rejected"];
-const VALID_VARIANT = ["x_thread", "ih_long"] as const;
+const VALID_VARIANT = ["x_thread", "ih_long", "reddit"] as const;
 const VALID_RATING = ["star", "flop", "neutral", "unrated"] as const;
 
 export default async function HistoryPage({
@@ -99,9 +99,7 @@ export default async function HistoryPage({
                     <div className="space-y-1 min-w-0 flex-1">
                       <div className="flex items-center gap-2 text-xs font-mono flex-wrap">
                         <Badge variant="outline">
-                          {draft.variant === "x_thread"
-                            ? "X thread"
-                            : "Indie Hackers"}
+                          {variantLabel(draft.variant, draft.subreddit)}
                         </Badge>
                         <StatusBadge status={draft.status as DraftStatus} />
                         <Badge

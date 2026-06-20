@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getAnthropicKey } from "./env-keys";
 import { getBannedWords, getStyleNotes } from "./settings";
 import { getDraftWithMoment, updateDraftContent } from "./draft-mutations";
+import { SUBREDDIT_RULES, isSubSlug } from "./reddit-subs";
 import { DRAFT_SYSTEM_PROMPT } from "@/prompts/draft-system";
 
 /*
@@ -55,8 +56,17 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
   }
   const { draft, moment } = found;
 
-  if (draft.variant !== "x_thread" && draft.variant !== "ih_long") {
+  if (
+    draft.variant !== "x_thread" &&
+    draft.variant !== "ih_long" &&
+    draft.variant !== "reddit"
+  ) {
     throw new Error(`Unknown variant: ${draft.variant}`);
+  }
+  if (draft.variant === "reddit" && !isSubSlug(draft.subreddit)) {
+    throw new Error(
+      `Reddit draft ${draftId} has an unknown subreddit: ${draft.subreddit}`,
+    );
   }
 
   // source_ref is jsonb — postgres.js parses it for us, not a TEXT-of-JSON
@@ -73,10 +83,18 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
     getStyleNotes(),
   ]);
 
+  // Reddit redrafts the self-text BODY (title is preserved). X/IH redraft the
+  // single content blob.
+  const rule = draft.variant === "reddit" && isSubSlug(draft.subreddit)
+    ? SUBREDDIT_RULES[draft.subreddit]
+    : null;
+
   const variantLabel =
     draft.variant === "x_thread"
       ? "X thread (numbered tweets, each under 280 chars, strong opening hook)"
-      : "Indie Hackers long-form post (300-600 words, conversational, one clear takeaway)";
+      : draft.variant === "ih_long"
+        ? "Indie Hackers long-form post (300-600 words, conversational, one clear takeaway)"
+        : `${rule!.displayName} post BODY in journey format (honest, real numbers or [VERIFY], a what-went-wrong beat, one specific insight, no forced CTA). Keep the existing title — redraft the self-text only.`;
 
   const parts: string[] = [
     `# Regenerate one variant`,
@@ -89,11 +107,22 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
     "",
     `Variant to redraft: **${variantLabel}**`,
     "",
+  ];
+
+  if (rule) {
+    parts.push(`Target subreddit: ${rule.displayName}`);
+    parts.push(`Tone for this sub: ${rule.toneNote}`);
+    parts.push(`This sub's self-promo norms: ${rule.selfPromoRule}`);
+    if (draft.title) parts.push(`Existing title (keep as-is): ${draft.title}`);
+    parts.push("");
+  }
+
+  parts.push(
     `Previous draft (for reference — produce a meaningfully different version, don't just paraphrase):`,
     "",
     draft.content,
     "",
-  ];
+  );
 
   if (userBannedWords.length > 0) {
     parts.push("## User banned words (in addition to the system prompt's list)");

@@ -16,19 +16,36 @@ import { Button } from "@/components/ui/button";
 import { markPostedAction } from "@/app/dashboard-actions";
 import { cn } from "@/lib/utils";
 import type { DraftRow } from "@/lib/moments";
+import { SUBREDDIT_RULES, isSubSlug } from "@/lib/reddit-subs";
 
 type Props = { draft: DraftRow };
 
-// New-post URLs for each platform — straight from the spec.
-const PLATFORM_URL: Record<DraftRow["variant"], string> = {
-  x_thread: "https://x.com/compose/post",
-  ih_long: "https://www.indiehackers.com/new-post",
-};
+// New-post URL for a draft's platform. Reddit is per-sub (its submit page);
+// X/IH are fixed. Falls back to Reddit's generic submit if the sub is somehow
+// unknown (shouldn't happen — the DB CHECK constrains it).
+function platformUrlFor(draft: DraftRow): string {
+  if (draft.variant === "x_thread") return "https://x.com/compose/post";
+  if (draft.variant === "ih_long") return "https://www.indiehackers.com/new-post";
+  if (draft.variant === "reddit" && isSubSlug(draft.subreddit)) {
+    return SUBREDDIT_RULES[draft.subreddit].submitUrl;
+  }
+  return "https://www.reddit.com/submit";
+}
 
-const PLATFORM_LABEL: Record<DraftRow["variant"], string> = {
-  x_thread: "X",
-  ih_long: "Indie Hackers",
-};
+function platformLabelFor(draft: DraftRow): string {
+  if (draft.variant === "x_thread") return "X";
+  if (draft.variant === "ih_long") return "Indie Hackers";
+  if (draft.variant === "reddit") {
+    return draft.subreddit ? `r/${draft.subreddit}` : "Reddit";
+  }
+  return "Reddit";
+}
+
+function postedUrlPlaceholder(draft: DraftRow): string {
+  if (draft.variant === "x_thread") return "https://x.com/...";
+  if (draft.variant === "ih_long") return "https://indiehackers.com/post/...";
+  return "https://reddit.com/r/.../comments/...";
+}
 
 // Local UI states for the flow. Server-side draft.status is the source of
 // truth for "posted"; the in-between states (copied / asking) are transient
@@ -53,8 +70,8 @@ function ActiveFlow({ draft }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const platformLabel = PLATFORM_LABEL[draft.variant];
-  const platformUrl = PLATFORM_URL[draft.variant];
+  const platformLabel = platformLabelFor(draft);
+  const platformUrl = platformUrlFor(draft);
 
   // Track the timer + focus listener so we can clean them up if the user
   // dismisses early or unmounts.
@@ -164,7 +181,7 @@ function ActiveFlow({ draft }: Props) {
           <input
             id={`posted-url-${draft.id}`}
             type="url"
-            placeholder={`https://${draft.variant === "x_thread" ? "x.com/..." : "indiehackers.com/post/..."}`}
+            placeholder={postedUrlPlaceholder(draft)}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => {
@@ -225,7 +242,7 @@ function PostedState({ draft }: Props) {
     <div className="rounded-md border bg-wyco-teal/5 p-3 space-y-1.5">
       <div className="flex items-center gap-2 text-sm text-wyco-teal">
         <Check className="size-4" />
-        Posted to {PLATFORM_LABEL[draft.variant]}.
+        Posted to {platformLabelFor(draft)}.
       </div>
       {url ? (
         <a

@@ -10,11 +10,19 @@ export type MomentRow = {
   repo: string | null;
 };
 
+export type DraftVariant = "x_thread" | "ih_long" | "reddit";
+
 export type DraftRow = {
   id: number;
   moment_id: number;
-  variant: "x_thread" | "ih_long";
+  variant: DraftVariant;
   content: string;
+  /** Reddit-only: target sub slug (one of the curated SUBREDDIT_RULES keys).
+   *  NULL for x_thread / ih_long (enforced by a DB CHECK constraint). */
+  subreddit: string | null;
+  /** Reddit-only: post title, stored separately from the self-text `content`.
+   *  NULL for x_thread / ih_long. */
+  title: string | null;
   status: "draft" | "approved" | "posted" | "rejected";
   rating: "star" | "flop" | "neutral" | null;
   posted_url: string | null;
@@ -84,6 +92,71 @@ export async function insertMomentWithDrafts(args: {
   return momentId;
 }
 
+/**
+ * Insert a single Reddit draft attached to an existing moment. Unlike X/IH
+ * (created together with the moment via the insert_moment_with_drafts RPC),
+ * Reddit drafts are generated on demand from the dashboard, one row per
+ * (moment × sub). variant is fixed to 'reddit'; subreddit + title are required
+ * by the DB CHECK constraints added in migration 0004 Part A.
+ *
+ * Returns the new draft's id.
+ */
+export async function insertRedditDraft(args: {
+  momentId: number;
+  subreddit: string;
+  title: string;
+  content: string;
+}): Promise<number> {
+  const rows = await sql<Array<{ id: number }>>`
+    INSERT INTO drafts (moment_id, variant, subreddit, title, content)
+    VALUES (${args.momentId}, 'reddit', ${args.subreddit}, ${args.title}, ${args.content})
+    RETURNING id
+  `;
+  const id = rows[0]?.id;
+  if (id === undefined || id === null) {
+    throw new Error("insertRedditDraft: insert returned no id");
+  }
+  return Number(id);
+}
+
+/**
+ * Delete any existing Reddit drafts for a (moment × sub) before regenerating,
+ * so a re-run replaces rather than stacks duplicates. Only removes rows still
+ * in 'draft' status — never clobbers an approved/posted Reddit draft.
+ */
+export async function deleteRedditDraftsForSub(
+  momentId: number,
+  subreddit: string,
+): Promise<void> {
+  await sql`
+    DELETE FROM drafts
+    WHERE moment_id = ${momentId}
+      AND variant = 'reddit'
+      AND subreddit = ${subreddit}
+      AND status = 'draft'
+  `;
+}
+
+/** Fetch one moment by id (without drafts). Used by the Reddit generate action. */
+export async function getMomentById(
+  momentId: number,
+): Promise<MomentWithDrafts | null> {
+  const moments = await sql<MomentRow[]>`
+    SELECT id, summary, source_type, source_ref, generation_id, created_at, repo
+    FROM moments
+    WHERE id = ${momentId}
+    LIMIT 1
+  `;
+  const m = moments[0];
+  if (!m) return null;
+
+  let sourceRefs: string[] = [];
+  if (Array.isArray(m.source_ref)) {
+    sourceRefs = m.source_ref.filter((s): s is string => typeof s === "string");
+  }
+  return { ...m, source_refs: sourceRefs, drafts: [] };
+}
+
 /** All moments in the most recent generation, with their drafts attached. */
 export async function getLatestGeneration(): Promise<MomentWithDrafts[]> {
   // Step 1: find the most recent generation_id.
@@ -115,17 +188,18 @@ export async function getMomentsByGeneration(
 
   const momentIds = moments.map((m) => m.id);
   const drafts = await sql<DraftRow[]>`
-    SELECT id, moment_id, variant, content, status, rating,
+    SELECT id, moment_id, variant, content, subreddit, title, status, rating,
            posted_url, posted_at, scheduled_for, created_at, updated_at
     FROM drafts
     WHERE moment_id IN ${sql(momentIds)}
   `;
 
-  // Group drafts by moment_id.
+  // Group drafts by moment_id. Spread each row into a plain object (BIPS-L4):
+  // these cross into the MomentCard client component.
   const byMoment = new Map<number, DraftRow[]>();
   for (const d of drafts) {
     const arr = byMoment.get(d.moment_id) ?? [];
-    arr.push(d);
+    arr.push({ ...d });
     byMoment.set(d.moment_id, arr);
   }
 

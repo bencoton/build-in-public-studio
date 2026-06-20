@@ -12,6 +12,9 @@ import {
   RotateCcw,
   Loader2,
   AlertCircle,
+  Copy,
+  Sparkles,
+  ClipboardList,
 } from "lucide-react";
 
 import {
@@ -27,8 +30,16 @@ import {
   saveDraftEditAction,
   regenerateDraftAction,
   setDraftStatusAction,
+  generateRedditDraftsAction,
 } from "@/app/dashboard-actions";
 import type { MomentWithDrafts, DraftRow } from "@/lib/moments";
+import {
+  SUBREDDIT_RULES,
+  SUB_SLUGS,
+  isSubSlug,
+  MAX_SUBS_PER_GENERATE,
+  type SubSlug,
+} from "@/lib/reddit-subs";
 import { CopyOpenFlow } from "./copy-open-flow";
 import { ScheduledDateEditor } from "./scheduled-date-editor";
 
@@ -92,8 +103,234 @@ export function MomentCard({ moment }: { moment: MomentWithDrafts }) {
             (missing — Claude didn&apos;t return this variant)
           </p>
         )}
+
+        <RedditSection moment={moment} />
       </CardContent>
     </Card>
+  );
+}
+
+// ── Reddit section ────────────────────────────────────────────────────────
+// Lives below the X/IH tabs on each moment card. Lists any Reddit drafts that
+// already exist (one per sub) and offers a multi-select + generate for subs
+// that don't yet have a draft. Reuses DraftVariant for the body so edit /
+// regenerate / approve / reject / Copy+Open all behave exactly as for X/IH.
+
+function RedditSection({ moment }: { moment: MomentWithDrafts }) {
+  const redditDrafts = moment.drafts.filter((d) => d.variant === "reddit");
+
+  const draftedSubs = new Set(
+    redditDrafts
+      .map((d) => d.subreddit)
+      .filter((s): s is SubSlug => isSubSlug(s)),
+  );
+  const availableSubs = SUB_SLUGS.filter((s) => !draftedSubs.has(s));
+
+  const [selected, setSelected] = useState<SubSlug[]>([]);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [genPending, startGenTransition] = useTransition();
+
+  const toggleSub = (sub: SubSlug) => {
+    setGenError(null);
+    setSelected((prev) =>
+      prev.includes(sub)
+        ? prev.filter((s) => s !== sub)
+        : prev.length >= MAX_SUBS_PER_GENERATE
+          ? prev
+          : [...prev, sub],
+    );
+  };
+
+  const handleGenerate = () => {
+    setGenError(null);
+    startGenTransition(async () => {
+      const r = await generateRedditDraftsAction(moment.id, selected);
+      if (!r.ok) {
+        setGenError(r.error);
+      } else {
+        setSelected([]);
+      }
+    });
+  };
+
+  return (
+    <div className="space-y-4 pt-4 border-t">
+      <div className="flex items-center gap-2">
+        <h4 className="text-sm font-medium flex items-center gap-1.5">
+          <span className="text-wyco-teal">Reddit</span>
+          <span className="text-xs font-normal text-muted-foreground">
+            — tailored per subreddit
+          </span>
+        </h4>
+      </div>
+
+      {/* Existing reddit drafts, one card per sub */}
+      {redditDrafts.length > 0 ? (
+        <div className="space-y-4">
+          {redditDrafts.map((d) => (
+            <RedditDraftCard key={d.id} draft={d} />
+          ))}
+        </div>
+      ) : (
+        // Neutral (not error) empty state — "not generated yet" is distinct
+        // from "failed", matching the Stage-10 neutral-vs-error styling.
+        <p className="text-sm text-muted-foreground">
+          No Reddit draft yet. Pick one or more subreddits below and generate —
+          each gets its own draft tailored to that community&apos;s tone and
+          rules.
+        </p>
+      )}
+
+      {/* Sub multi-select + generate (only for subs without a draft yet) */}
+      {availableSubs.length > 0 && (
+        <div className="space-y-2.5">
+          <div className="flex flex-wrap gap-2">
+            {availableSubs.map((sub) => {
+              const isOn = selected.includes(sub);
+              const atCap =
+                !isOn && selected.length >= MAX_SUBS_PER_GENERATE;
+              return (
+                <button
+                  key={sub}
+                  type="button"
+                  onClick={() => toggleSub(sub)}
+                  disabled={atCap || genPending}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    isOn
+                      ? "border-wyco-teal bg-wyco-teal/10 text-wyco-teal"
+                      : "border-input text-muted-foreground hover:text-foreground",
+                    atCap && "opacity-40 cursor-not-allowed",
+                  )}
+                >
+                  {SUBREDDIT_RULES[sub].displayName}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleGenerate}
+              disabled={selected.length === 0 || genPending}
+            >
+              {genPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="size-3.5" />
+              )}
+              {genPending
+                ? "Generating..."
+                : `Generate Reddit draft${selected.length === 1 ? "" : "s"}`}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Up to {MAX_SUBS_PER_GENERATE} at once.
+            </span>
+          </div>
+
+          {genError && (
+            <p className="text-sm text-destructive flex items-center gap-1.5">
+              <AlertCircle className="size-4" />
+              {genError}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// One existing Reddit draft: title (with copy), the sub's pre-post checklist,
+// then the reused DraftVariant for the body + lifecycle + Copy+Open.
+function RedditDraftCard({ draft }: { draft: DraftRow }) {
+  const sub = isSubSlug(draft.subreddit) ? draft.subreddit : null;
+  const rule = sub ? SUBREDDIT_RULES[sub] : null;
+
+  return (
+    <div className="rounded-md border p-3 space-y-3">
+      <div className="flex items-center gap-2">
+        <Badge variant="outline" className="font-mono text-[10px]">
+          {rule ? rule.displayName : `r/${draft.subreddit}`}
+        </Badge>
+        <StatusDot status={draft.status} />
+      </div>
+
+      {/* Title — Reddit posts are title + body. Show it with a copy button so
+          it can be pasted into the title field separately from the body. */}
+      {draft.title && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Title
+            </span>
+            <CopyTitleButton title={draft.title} />
+          </div>
+          <p className="text-sm font-medium leading-snug rounded-md border bg-card/50 px-3 py-2">
+            {draft.title}
+          </p>
+        </div>
+      )}
+
+      {/* Pre-post checklist + self-promo rule for this sub (A0.4). */}
+      {rule && <PrePostChecklist rule={rule} />}
+
+      {/* Body + edit / regenerate / approve / reject / Copy+Open — reused. */}
+      <DraftVariant draft={draft} />
+    </div>
+  );
+}
+
+function PrePostChecklist({
+  rule,
+}: {
+  rule: (typeof SUBREDDIT_RULES)[SubSlug];
+}) {
+  return (
+    <details className="rounded-md border bg-muted/20 px-3 py-2 text-xs">
+      <summary className="flex items-center gap-1.5 cursor-pointer font-medium text-muted-foreground">
+        <ClipboardList className="size-3.5" />
+        Before you post to {rule.displayName} — self-promo rules
+      </summary>
+      <div className="pt-2 space-y-2">
+        <p className="text-muted-foreground">{rule.selfPromoRule}</p>
+        <ul className="space-y-1">
+          {rule.prePostChecklist.map((item, i) => (
+            <li key={i} className="flex items-start gap-1.5">
+              <Check className="size-3.5 mt-0.5 shrink-0 text-wyco-teal" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+        {rule.flairHint && (
+          <p className="text-muted-foreground italic">{rule.flairHint}</p>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function CopyTitleButton({ title }: { title: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(title);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard blocked — silently no-op; the title is visible to select.
+    }
+  };
+  return (
+    <Button type="button" size="sm" variant="ghost" onClick={handleCopy}>
+      {copied ? (
+        <Check className="size-3.5" />
+      ) : (
+        <Copy className="size-3.5" />
+      )}
+      {copied ? "Copied" : "Copy title"}
+    </Button>
   );
 }
 

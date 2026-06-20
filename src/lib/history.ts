@@ -13,7 +13,7 @@ export type HistoryDraft = DraftRow & {
 
 export type HistoryFilters = {
   status?: DraftStatus | "all";
-  variant?: "x_thread" | "ih_long" | "all";
+  variant?: "x_thread" | "ih_long" | "reddit" | "all";
   rating?: DraftRating | "unrated" | "all";
   /** "owner/name", "general" for NULL-repo moments, or "all" / undefined for no filter. */
   repo?: string;
@@ -42,6 +42,8 @@ export async function getAllDrafts(
       moment_id: number;
       variant: DraftRow["variant"];
       content: string;
+      subreddit: string | null;
+      title: string | null;
       status: DraftRow["status"];
       rating: DraftRow["rating"];
       posted_url: string | null;
@@ -56,7 +58,7 @@ export async function getAllDrafts(
     }>
   >`
     SELECT
-      d.id, d.moment_id, d.variant, d.content, d.status, d.rating,
+      d.id, d.moment_id, d.variant, d.content, d.subreddit, d.title, d.status, d.rating,
       d.posted_url, d.posted_at, d.scheduled_for, d.created_at, d.updated_at,
       m.summary      AS moment_summary,
       m.source_type  AS moment_source_type,
@@ -111,8 +113,12 @@ export async function setDraftRating(
  * lean on, so we fetch ALL starred drafts and sample client-side. At
  * single-user scale (likely <100 starred drafts in a year) this is trivial.
  */
-export async function getStarredExamples(count: number): Promise<HistoryDraft[]> {
+export async function getStarredExamples(
+  count: number,
+  variant?: DraftRow["variant"],
+): Promise<HistoryDraft[]> {
   const safe = Math.min(Math.max(1, Math.floor(count)), 50);
+  const variantFilter = variant ?? null;
 
   const rows = await sql<
     Array<{
@@ -120,6 +126,8 @@ export async function getStarredExamples(count: number): Promise<HistoryDraft[]>
       moment_id: number;
       variant: DraftRow["variant"];
       content: string;
+      subreddit: string | null;
+      title: string | null;
       status: DraftRow["status"];
       rating: DraftRow["rating"];
       posted_url: string | null;
@@ -134,7 +142,7 @@ export async function getStarredExamples(count: number): Promise<HistoryDraft[]>
     }>
   >`
     SELECT
-      d.id, d.moment_id, d.variant, d.content, d.status, d.rating,
+      d.id, d.moment_id, d.variant, d.content, d.subreddit, d.title, d.status, d.rating,
       d.posted_url, d.posted_at, d.scheduled_for, d.created_at, d.updated_at,
       m.summary      AS moment_summary,
       m.source_type  AS moment_source_type,
@@ -143,6 +151,7 @@ export async function getStarredExamples(count: number): Promise<HistoryDraft[]>
     FROM drafts d
     INNER JOIN moments m ON m.id = d.moment_id
     WHERE d.rating = 'star'
+      AND (${variantFilter}::text IS NULL OR d.variant = ${variantFilter})
   `;
 
   const all: HistoryDraft[] = rows.map((r) => ({ ...r }));
@@ -173,6 +182,8 @@ export async function getScheduledDrafts(
       moment_id: number;
       variant: DraftRow["variant"];
       content: string;
+      subreddit: string | null;
+      title: string | null;
       status: DraftRow["status"];
       rating: DraftRow["rating"];
       posted_url: string | null;
@@ -187,7 +198,7 @@ export async function getScheduledDrafts(
     }>
   >`
     SELECT
-      d.id, d.moment_id, d.variant, d.content, d.status, d.rating,
+      d.id, d.moment_id, d.variant, d.content, d.subreddit, d.title, d.status, d.rating,
       d.posted_url, d.posted_at, d.scheduled_for, d.created_at, d.updated_at,
       m.summary      AS moment_summary,
       m.source_type  AS moment_source_type,

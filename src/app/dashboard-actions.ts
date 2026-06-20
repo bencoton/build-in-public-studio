@@ -10,7 +10,12 @@ import {
 } from "@/lib/draft-mutations";
 import { fromLocalDateString } from "@/lib/scheduling";
 import { regenerateDraft, type RegenerateResult } from "@/lib/claude-regenerate";
-import { generateDrafts, type GenerationResult } from "@/lib/claude";
+import {
+  generateDrafts,
+  generateRedditDrafts,
+  type GenerationResult,
+  type RedditGenerationResult,
+} from "@/lib/claude";
 import { syncWatchedRepos, syncOneRepo } from "@/lib/github-sync";
 import { markDraftAsPosted } from "@/lib/posting";
 import { setLastRunAt } from "@/lib/settings";
@@ -27,6 +32,10 @@ export type RegenerateActionResult =
 
 export type GenerateActionResult =
   | { ok: true; result: GenerationResult }
+  | { ok: false; error: string };
+
+export type RedditGenerateActionResult =
+  | { ok: true; result: RedditGenerationResult }
   | { ok: false; error: string };
 
 // ── Edit / save a draft ──────────────────────────────────────────────────
@@ -153,6 +162,26 @@ export async function generateForRepoAction(repo: string): Promise<GenerateActio
 
     const result = await generateDrafts({ repoFilter: repo });
     await setLastRunAt(new Date().toISOString());
+    revalidatePath("/");
+    return { ok: true, result };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    return { ok: false, error: message };
+  }
+}
+
+// ── Generate Reddit drafts for one moment (on demand) ────────────────────
+//
+// Called from the moment card's Reddit section with the selected subs (capped
+// at MAX_SUBS_PER_GENERATE in the generator). One tailored journey-format
+// draft per sub is generated and inserted as a variant='reddit' drafts row.
+
+export async function generateRedditDraftsAction(
+  momentId: number,
+  subs: string[],
+): Promise<RedditGenerateActionResult> {
+  try {
+    const result = await generateRedditDrafts({ momentId, subs });
     revalidatePath("/");
     return { ok: true, result };
   } catch (err) {

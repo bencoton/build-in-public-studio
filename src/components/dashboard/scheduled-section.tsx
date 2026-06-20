@@ -9,7 +9,7 @@ import { CalendarClock, ExternalLink } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getScheduledDrafts } from "@/lib/history";
-import { displayProjectName } from "@/lib/format";
+import { displayProjectName, variantLabel } from "@/lib/format";
 
 export async function ScheduledSection() {
   const drafts = await getScheduledDrafts(7);
@@ -29,8 +29,7 @@ export async function ScheduledSection() {
         <CardContent className="p-0 divide-y">
           {drafts.map((d) => {
             const when = d.scheduled_for ? formatScheduledFor(d.scheduled_for) : "";
-            const variantLabel =
-              d.variant === "x_thread" ? "X thread" : "Indie Hackers";
+            const label = variantLabel(d.variant, d.subreddit);
             const project = d.moment_repo
               ? displayProjectName(d.moment_repo)
               : "General";
@@ -49,7 +48,7 @@ export async function ScheduledSection() {
                       </Badge>
                       <span className="text-muted-foreground">·</span>
                       <span className="text-muted-foreground">
-                        {variantLabel}
+                        {label}
                       </span>
                       {d.status === "approved" && (
                         <Badge className="text-[10px] bg-wyco-teal/15 text-wyco-teal border-wyco-teal/30">

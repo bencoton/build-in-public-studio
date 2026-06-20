@@ -22,6 +22,7 @@ import {
   type WebsiteSummaryContent,
 } from "./summaries";
 import { getStarredExamples, type HistoryDraft } from "./history";
+import { variantLabel } from "./format";
 import { DRAFT_SYSTEM_PROMPT } from "@/prompts/draft-system";
 
 const MODEL = "claude-sonnet-4-6";
@@ -349,10 +350,9 @@ function buildSummaryUserMessage(args: {
     parts.push("");
     for (let i = 0; i < args.voiceExamples.length; i++) {
       const ex = args.voiceExamples[i];
-      const variantLabel =
-        ex.variant === "x_thread" ? "X thread" : "Indie Hackers long-form";
+      const label = variantLabel(ex.variant, ex.subreddit);
       const postedLabel = ex.status === "posted" ? " · posted" : "";
-      parts.push(`### Example ${i + 1} (${variantLabel}${postedLabel})`);
+      parts.push(`### Example ${i + 1} (${label}${postedLabel})`);
       parts.push(ex.content);
       parts.push("");
     }

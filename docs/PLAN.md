@@ -91,6 +91,30 @@ Build Stage 9 first — its notification + cron infrastructure is the foundation
 
 ---
 
+## Phase 1.5c — Reddit drafting ✅ shipped 2026-06-20
+
+*Added 2026-06-20. Ships before the OSS launch so the public debut shows three platforms. Full spec: [`specs/reddit-and-citation-tracking-spec.md`](./specs/reddit-and-citation-tracking-spec.md) Part A; build steps: [`specs/reddit-and-citation-implementation-plan.md`](./specs/reddit-and-citation-implementation-plan.md) Campaign 1.*
+
+**Goal:** add Reddit as a first-class third platform in the moment→draft flow. For each moment the user selects one or more target subreddits (r/SaaS, r/indiehackers, r/SideProject, r/microsaas); Claude writes a separately-tailored journey-format draft per sub (honest headline, real numbers, what went wrong, one specific insight, no forced CTA), and the UI surfaces that sub's self-promo rules as a pre-post checklist so drafts don't trip mod filters.
+
+**Key decisions:**
+
+- One tailored draft *per selected sub* (not one generic Reddit draft). New `drafts.subreddit` column; multiple `variant='reddit'` rows per moment; cap at 3 subs/moment to bound token cost.
+- Subreddit tone + rules live as a versioned config in `src/lib/reddit-subs.ts` — **no runtime scraping** (non-goal).
+- Reuses everything: edit, regenerate, approve/reject, Copy + Open (to `r/<sub>/submit`), `/history`, ratings, and voice learning (starred Reddit drafts feed future Reddit generation).
+- **Never auto-posts** (project rule #1) — Copy + Open only.
+
+**Schema:** `migrations/0004_citation_loop_schema.sql` Part A — extends `drafts.variant` to include `reddit`, adds `subreddit` (curated-slug CHECK + variant↔subreddit consistency CHECK) and `title`.
+
+**Done when:**
+
+- Moment cards have a Reddit section with a sub multi-select and a "Generate Reddit drafts" action.
+- Each generated draft renders with title + body, the sub's pre-post checklist, edit/regenerate/approve/reject, and Copy + Open to the right sub.
+- `/history` platform filter includes Reddit; voice learning samples starred Reddit drafts.
+- No new npm dependency added.
+
+---
+
 ## Phase 2 — OSS launch
 
 **Goal:** the GitHub repo flips to public and the project is presented as a finished local tool that anyone can clone and run. This is the credibility milestone.
@@ -101,6 +125,38 @@ Build Stage 9 first — its notification + cron infrastructure is the foundation
 - README is polished for first-time visitors (the version we ship in Phase 0 is the starting point — gets a polish pass at Phase 2 with screenshots).
 - A short launch post (X thread + IH long-form) drafted *by the tool itself* (the meta-loop is the launch).
 - Posted on Indie Hackers, X, and any other relevant communities.
+
+---
+
+## Phase 2.5 — Citation tracking (the post→outcome loop)
+
+*Added 2026-06-20. Ships after the OSS launch — it's the bigger, differentiating feature. Full spec: [`specs/reddit-and-citation-tracking-spec.md`](./specs/reddit-and-citation-tracking-spec.md) Part B; build steps: [`specs/reddit-and-citation-implementation-plan.md`](./specs/reddit-and-citation-implementation-plan.md) Campaign 2.*
+
+**Goal:** measure whether the project is cited by AI answer engines (Perplexity etc.) for the prompts its buyers actually ask, and attribute those citations back to the posts Studio wrote. This is the sharpest differentiator versus commit-driven competitors: Studio already knows which URLs it generated posts for, so it can close the post → tracked-URL → citation-earned loop.
+
+**Key decisions:**
+
+- **Per-project tracked-prompt set + brand/domain match config.** Prompts in `tracked_prompts`; brand name/domain in the `settings` table (namespaced per repo).
+- **Perplexity Sonar first** (native citations, ~pennies/user/mo). Gemini grounding + OpenAI web-search are P2 adapters behind a common `CitationEngine` interface. Google AI Overviews skipped (no API; would need paid SERP scraping).
+- **Matcher** records `cited` (brand domain in the engine's sources) vs `mentioned` (brand named in answer text but not in sources), plus matched URL, engine, prompt, timestamp, and the full sources list (jsonb) so it can be re-run without re-querying. Stored as time-series in `citation_results`.
+- **Scanner runs off-serverless:** a Docker container on the homelab node `wyco`, twice weekly, connecting directly to Neon. Keeps slow LLM-per-prompt work off Vercel and node-only code out of the webpack bundle (BIPS-L5).
+- **BYO keys, encrypted in Neon** (settings table) from day one, decrypted with a single env `ENCRYPTION_KEY` shared by the Vercel app and the scanner container — fail-closed like `CRON_SECRET`.
+- **Honesty:** every citation figure is labelled "sampled / approximate", never an exact count. Attribution is framed as correlation, not causation.
+- **No paid social-engagement APIs** (X charges ~$200/mo for data users already get free) — a manual paste-in field on posted drafts covers likes/reposts instead.
+
+**Schema:** `migrations/0004_citation_loop_schema.sql` Part B — `tracked_prompts`, `citation_results` (time-series, with a per-prompt/engine/day idempotency index), `scan_runs` (health/visibility), plus `drafts.promoted_url` + `drafts.engagement_manual` for attribution and manual engagement.
+
+**Build order (each a checkpoint):** schema → encrypted BYOK + brand config → Perplexity adapter + matcher (after a pre-flight Sonar API-shape audit, WoW L12) → Docker scanner + twice-weekly cron on `wyco` → `/citations` read UI → attribution view → manual engagement field.
+
+**Done when:**
+
+- The user can define prompts + brand/domain per project and save an encrypted Perplexity key.
+- The homelab container scans twice weekly and writes idempotent `citation_results` rows.
+- `/citations` shows per-project citation-rate trend, latest sources, and per-prompt status — all labelled sampled/approximate.
+- At least one posted draft can be shown alongside citations earned after it shipped (the loop, end to end).
+- No new npm dependency added.
+
+**Open questions before starting (see spec §D):** key-rotation story (D3), exact Perplexity Sonar response shape (D4 — resolve via the pre-flight audit), scan idempotency window (D5).
 
 ---
 

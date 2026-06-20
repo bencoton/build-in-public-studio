@@ -13,7 +13,6 @@ import {
   Check,
   AlertCircle,
   Copy,
-  X,
   Plus,
   Minus,
 } from "lucide-react";

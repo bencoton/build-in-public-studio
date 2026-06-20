@@ -18,9 +18,10 @@ const STATUS_OPTIONS = [
 ] as const;
 
 const VARIANT_OPTIONS = [
-  { value: "all", label: "Both variants" },
+  { value: "all", label: "All platforms" },
   { value: "x_thread", label: "X thread" },
   { value: "ih_long", label: "Indie Hackers" },
+  { value: "reddit", label: "Reddit" },
 ] as const;
 
 const RATING_OPTIONS = [

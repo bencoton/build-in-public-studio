@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { CalendarClock, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getScheduledDrafts } from "@/lib/history";
-import { displayProjectName } from "@/lib/format";
+import { displayProjectName, variantLabel } from "@/lib/format";
 
 export default async function ScheduledPage() {
   // Show the next 60 days so users can see everything they have queued up.
@@ -34,8 +34,7 @@ export default async function ScheduledPage() {
               const when = d.scheduled_for
                 ? formatScheduledFor(d.scheduled_for)
                 : "";
-              const variantLabel =
-                d.variant === "x_thread" ? "X thread" : "Indie Hackers";
+              const label = variantLabel(d.variant, d.subreddit);
               const project = d.moment_repo
                 ? displayProjectName(d.moment_repo)
                 : "General";
@@ -59,7 +58,7 @@ export default async function ScheduledPage() {
                         </Badge>
                         <span className="text-muted-foreground">·</span>
                         <span className="text-muted-foreground">
-                          {variantLabel}
+                          {label}
                         </span>
                         {d.status === "approved" && (
                           <Badge className="text-[10px] bg-wyco-teal/15 text-wyco-teal border-wyco-teal/30">

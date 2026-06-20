@@ -9,9 +9,21 @@ import {
   getReposForShaPrefix,
   type CommitRow,
 } from "./commits";
-import { insertMomentWithDrafts } from "./moments";
+import {
+  insertMomentWithDrafts,
+  insertRedditDraft,
+  deleteRedditDraftsForSub,
+  getMomentById,
+} from "./moments";
 import { getStarredExamples, type HistoryDraft } from "./history";
 import { stagger } from "./scheduling";
+import { variantLabel } from "./format";
+import {
+  SUBREDDIT_RULES,
+  isSubSlug,
+  MAX_SUBS_PER_GENERATE,
+  type SubSlug,
+} from "./reddit-subs";
 import { DRAFT_SYSTEM_PROMPT } from "@/prompts/draft-system";
 
 /*
@@ -45,6 +57,7 @@ const MODEL = "claude-sonnet-4-6";
 
 const IDENTIFY_TOOL_NAME = "submit_moments";
 const DRAFT_MOMENT_TOOL_NAME = "submit_moment_drafts";
+const REDDIT_DRAFT_TOOL_NAME = "submit_reddit_draft";
 
 // ── Tool schemas ─────────────────────────────────────────────────────────
 
@@ -109,6 +122,30 @@ function buildDraftMomentTool() {
         },
       },
       required: ["x_thread", "ih_long"],
+    },
+  };
+}
+
+function buildRedditDraftTool() {
+  return {
+    name: REDDIT_DRAFT_TOOL_NAME,
+    description:
+      "Submit the Reddit post (title + self-text body) tailored to one specific subreddit. Always call this exactly once.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: {
+          type: "string",
+          description:
+            "The Reddit post title — an honest, specific headline. No clickbait, no hype words, no leading emoji. Reads like a real person describing what happened.",
+        },
+        body: {
+          type: "string",
+          description:
+            "The self-text body in journey format: real numbers (or a [VERIFY] placeholder), what went wrong, one specific insight, and no forced call-to-action. Plain prose, conversational, tailored to this sub's tone.",
+        },
+      },
+      required: ["title", "body"],
     },
   };
 }
@@ -424,6 +461,202 @@ async function draftMoment(
   };
 }
 
+// ── Reddit: one draft per (moment × sub) ─────────────────────────────────
+
+export type RedditMomentInput = {
+  summary: string;
+  source_type: string;
+  source_refs: string[];
+};
+
+export type RedditDraftContext = {
+  client: Anthropic;
+  userBannedWords: string[];
+  styleNotes: string;
+  /** Voice examples — already filtered to reddit-variant by the caller so the
+   *  model learns the user's Reddit voice specifically (A1.1). */
+  voiceExamples: HistoryDraft[];
+};
+
+/**
+ * Draft a single Reddit post (title + body) for one subreddit, tailored to
+ * that sub's tone and self-promo norms. One Claude call per (moment × sub) —
+ * the system prompt is the cached DRAFT_SYSTEM_PROMPT, only the per-sub user
+ * message varies, so subs after the first hit a warm cache.
+ *
+ * Returns the raw title/body + token usage; persistence is the caller's job
+ * (insertRedditDraft), mirroring how draftMoment hands drafts back to
+ * generateDrafts.
+ */
+export async function draftRedditForSub(
+  moment: RedditMomentInput,
+  subSlug: SubSlug,
+  relevantCommits: CommitRow[],
+  relevantNotes: NoteRow[],
+  ctx: RedditDraftContext,
+): Promise<{ title: string; body: string; usage: AnthropicUsage }> {
+  const userMessage = buildRedditDraftMessage({
+    moment,
+    subSlug,
+    relevantCommits,
+    relevantNotes,
+    userBannedWords: ctx.userBannedWords,
+    styleNotes: ctx.styleNotes,
+    voiceExamples: ctx.voiceExamples,
+  });
+
+  const tool = buildRedditDraftTool();
+
+  const response = await ctx.client.messages.create({
+    model: MODEL,
+    max_tokens: 2048,
+    system: [
+      {
+        type: "text",
+        text: DRAFT_SYSTEM_PROMPT,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
+    tools: [{ ...tool, cache_control: { type: "ephemeral" } }],
+    tool_choice: { type: "tool", name: REDDIT_DRAFT_TOOL_NAME },
+    messages: [{ role: "user", content: userMessage }],
+  });
+
+  const toolUse = response.content.find((b) => b.type === "tool_use");
+  if (!toolUse || toolUse.type !== "tool_use") {
+    throw new Error(
+      `Claude didn't call ${REDDIT_DRAFT_TOOL_NAME} for r/${subSlug}. Stop reason: ${response.stop_reason}.`,
+    );
+  }
+
+  const input = toolUse.input as { title?: unknown; body?: unknown };
+  if (
+    typeof input.title !== "string" ||
+    input.title.trim().length === 0 ||
+    typeof input.body !== "string" ||
+    input.body.trim().length === 0
+  ) {
+    throw new Error(`Claude returned a malformed Reddit draft for r/${subSlug}.`);
+  }
+
+  return {
+    title: input.title.trim(),
+    body: input.body.trim(),
+    usage: response.usage,
+  };
+}
+
+export type RedditGenerationResult = {
+  /** Number of Reddit drafts inserted (one per sub generated). */
+  count: number;
+  subs: SubSlug[];
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+};
+
+/**
+ * On-demand Reddit generation from the dashboard: for one existing moment and
+ * up to MAX_SUBS_PER_GENERATE subs, generate one tailored journey-format draft
+ * per sub and persist it. Each draft is an independent Claude call (parallel),
+ * reusing the cached system prompt. Reuses the moment's source material, the
+ * user's banned-words/style settings, and reddit-only starred voice examples.
+ *
+ * Re-running for a sub replaces that sub's still-in-'draft' row (it doesn't
+ * stack duplicates, and never clobbers an approved/posted Reddit draft).
+ */
+export async function generateRedditDrafts(args: {
+  momentId: number;
+  subs: string[];
+}): Promise<RedditGenerationResult> {
+  // ── Validate + dedupe + cap subs ──────────────────────────────────────
+  const seen = new Set<string>();
+  const subs: SubSlug[] = [];
+  for (const s of args.subs) {
+    if (isSubSlug(s) && !seen.has(s)) {
+      seen.add(s);
+      subs.push(s);
+    }
+  }
+  if (subs.length === 0) {
+    throw new Error("Select at least one valid subreddit.");
+  }
+  if (subs.length > MAX_SUBS_PER_GENERATE) {
+    throw new Error(
+      `Pick at most ${MAX_SUBS_PER_GENERATE} subreddits per generation.`,
+    );
+  }
+
+  const key = getAnthropicKey();
+  if (!key) {
+    throw new Error("ANTHROPIC_API_KEY is not set. Configure it in Settings first.");
+  }
+
+  const moment = await getMomentById(args.momentId);
+  if (!moment) {
+    throw new Error(`Moment ${args.momentId} not found.`);
+  }
+
+  // ── Load source material + prefs + reddit voice examples once ─────────
+  const [allCommits, userBannedWords, styleNotes, voiceExamples] =
+    await Promise.all([
+      getRecentCommits(500),
+      getBannedWords(),
+      getStyleNotes(),
+      getStarredExamples(10, "reddit"),
+    ]);
+
+  // Filter to just this moment's referenced source material (same shape as
+  // draftMoment): commits by SHA prefix, notes by numeric id.
+  const relevantCommits = allCommits.filter((c) =>
+    moment.source_refs.some((ref) => c.sha === ref || c.sha.startsWith(ref)),
+  );
+  const noteIds = moment.source_refs.filter((r) => /^\d+$/.test(r.trim()));
+  const relevantNotes = (
+    await Promise.all(noteIds.map((id) => getNoteById(Number(id))))
+  ).filter((n): n is NoteRow => n !== null);
+
+  const client = new Anthropic({ apiKey: key, maxRetries: 0 });
+  const ctx: RedditDraftContext = {
+    client,
+    userBannedWords,
+    styleNotes,
+    voiceExamples,
+  };
+
+  // ── Generate all subs in parallel ─────────────────────────────────────
+  const drafts = await Promise.all(
+    subs.map((sub) =>
+      draftRedditForSub(
+        {
+          summary: moment.summary,
+          source_type: moment.source_type,
+          source_refs: moment.source_refs,
+        },
+        sub,
+        relevantCommits,
+        relevantNotes,
+        ctx,
+      ).then((r) => ({ sub, ...r })),
+    ),
+  );
+
+  // ── Persist (replace any prior still-draft row per sub) ───────────────
+  for (const d of drafts) {
+    await deleteRedditDraftsForSub(args.momentId, d.sub);
+    await insertRedditDraft({
+      momentId: args.momentId,
+      subreddit: d.sub,
+      title: d.title,
+      content: d.body,
+    });
+  }
+
+  const totals = aggregateUsage(drafts.map((d) => d.usage));
+  return { count: drafts.length, subs, ...totals };
+}
+
 // ── User-message builders ─────────────────────────────────────────────────
 
 function buildIdentifyMessage(args: {
@@ -520,6 +753,74 @@ function buildDraftMomentMessage(args: {
   return parts.join("\n");
 }
 
+function buildRedditDraftMessage(args: {
+  moment: RedditMomentInput;
+  subSlug: SubSlug;
+  relevantCommits: CommitRow[];
+  relevantNotes: NoteRow[];
+  userBannedWords: string[];
+  styleNotes: string;
+  voiceExamples: HistoryDraft[];
+}): string {
+  const rule = SUBREDDIT_RULES[args.subSlug];
+  const parts: string[] = [];
+
+  parts.push(`# Draft a Reddit post for ${rule.displayName}\n`);
+
+  parts.push(`**Moment summary:** ${args.moment.summary}`);
+  parts.push(`**Source type:** ${args.moment.source_type}`);
+  parts.push(
+    `**Source refs:** ${args.moment.source_refs.join(", ") || "(none)"}\n`,
+  );
+
+  if (args.relevantCommits.length > 0) {
+    parts.push("## Relevant commits\n");
+    for (const c of args.relevantCommits) {
+      parts.push(
+        `- ${c.repo} \`${c.sha.slice(0, 7)}\` (${c.committed_at.toISOString()})\n  ${c.message.replace(/\n/g, "\n  ")}`,
+      );
+    }
+    parts.push("");
+  }
+
+  if (args.relevantNotes.length > 0) {
+    parts.push("## Relevant notes\n");
+    for (const n of args.relevantNotes) {
+      parts.push(`### Note ${n.id} (${n.created_at.toISOString()})\n${n.content}\n`);
+    }
+  }
+
+  parts.push("\n---\n");
+
+  // Per-sub steering — the heart of "tailored, not relabelled" (A0.2).
+  parts.push(`## Target subreddit: ${rule.displayName}\n`);
+  parts.push(`**Tone for this sub:** ${rule.toneNote}\n`);
+  parts.push(`**This sub's self-promo norms:** ${rule.selfPromoRule}\n`);
+
+  // Journey-format contract (A0.3) — same guardrails as X/IH, Reddit-shaped.
+  parts.push("## Required format — journey post\n");
+  parts.push(
+    [
+      "- **Honest headline** as the title — specific and concrete, no clickbait or hype words.",
+      "- **At least one real number** drawn from the source material above. If you don't have a concrete number, write a `[VERIFY]` placeholder rather than inventing one.",
+      "- **A 'what went wrong' beat** — the honest friction, mistake, or dead end. The 'beginner learning in public' angle is on-brand; lean in, don't paper over it.",
+      "- **One specific insight** the reader takes away — not a list of generic tips.",
+      "- **No forced call-to-action.** Don't bolt on 'check out my product' or 'follow me'. If the product comes up at all, it's woven into the story, not a pitch.",
+      "- Mark anything uncertain with `[VERIFY]`. Hallucinated specifics are worse than admitting a gap.",
+      "- Plain prose for the body. No markdown headers inside the post. No hashtags. Emoji only if it genuinely earns its place.",
+    ].join("\n"),
+  );
+  parts.push("");
+
+  appendSharedPreferences(parts, args);
+
+  parts.push(
+    `Write the title and body for a ${rule.displayName} post about the moment above, following the journey-format contract and this sub's tone. Tailor it to ${rule.displayName} specifically — do not produce generic text that would read identically on another sub. Call ${REDDIT_DRAFT_TOOL_NAME} with the title and body.`,
+  );
+
+  return parts.join("\n");
+}
+
 /** Shared block — banned words, style notes, voice examples. Used by both
  *  the identify and draft user messages. */
 function appendSharedPreferences(
@@ -552,10 +853,9 @@ function appendSharedPreferences(
     parts.push("");
     for (let i = 0; i < args.voiceExamples.length; i++) {
       const ex = args.voiceExamples[i];
-      const variantLabel =
-        ex.variant === "x_thread" ? "X thread" : "Indie Hackers long-form";
+      const label = variantLabel(ex.variant, ex.subreddit);
       const postedLabel = ex.status === "posted" ? " · posted" : "";
-      parts.push(`### Example ${i + 1} (${variantLabel}${postedLabel})`);
+      parts.push(`### Example ${i + 1} (${label}${postedLabel})`);
       parts.push(ex.content);
       parts.push("");
     }

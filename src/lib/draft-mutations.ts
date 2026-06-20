@@ -79,7 +79,7 @@ export async function getDraftWithMoment(
   draftId: number,
 ): Promise<{ draft: DraftRow; moment: MomentRow } | null> {
   const draftRows = await sql<DraftRow[]>`
-    SELECT id, moment_id, variant, content, status, rating,
+    SELECT id, moment_id, variant, content, subreddit, title, status, rating,
            posted_url, posted_at, scheduled_for, created_at, updated_at
     FROM drafts
     WHERE id = ${draftId}
