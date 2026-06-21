@@ -16,6 +16,9 @@ import { GenerateButton } from "./generate-button";
 // each moment as raw text. The polished dashboard with edit/regenerate/approve
 // buttons ships in Stage 6.
 
+// Reads Postgres at request time — never statically prerender (BIPS-L7).
+export const dynamic = "force-dynamic";
+
 export default async function DebugDraftPage() {
   const moments = await getLatestGeneration();
   const latestCreatedAt = moments[0]?.created_at;

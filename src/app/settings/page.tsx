@@ -19,6 +19,10 @@ import { PreferencesForm } from "./preferences-form";
 // runs them in parallel so the page TTFB is one round-trip, not four
 // sequential ones.
 
+// Reads Postgres at request time — never statically prerender (build-time DB
+// reads are stale and can crash on prerender; BIPS-L7).
+export const dynamic = "force-dynamic";
+
 export default async function SettingsPage() {
   const keys = readApiKeyState();
   const [watched, scheduleCron, bannedWords, styleNotes, subreddits] =

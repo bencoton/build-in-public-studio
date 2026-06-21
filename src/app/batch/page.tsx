@@ -15,6 +15,8 @@ import { BatchForm } from "./batch-form";
 // src/lib/claude.ts (identify + parallel drafts) keeps wall-clock under
 // 60s even for the batch path's 10-15 moments. Hobby tier compatible.
 export const maxDuration = 60;
+// Reads Postgres at request time — never statically prerender (BIPS-L7).
+export const dynamic = "force-dynamic";
 
 export default async function BatchPage() {
   const watchedRepos = await getWatchedRepos();

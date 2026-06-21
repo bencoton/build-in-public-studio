@@ -90,7 +90,9 @@ function SubRow({
   const [toneNote, setToneNote] = useState(sub.toneNote ?? "");
   const [selfPromoRule, setSelfPromoRule] = useState(sub.selfPromoRule ?? "");
   const [checklist, setChecklist] = useState(
-    (sub.prePostChecklist ?? []).join("\n"),
+    // Belt-and-braces: the read boundary already coerces jsonb → array, but
+    // never call .join on a value that might not be an array (BIPS-L7).
+    (Array.isArray(sub.prePostChecklist) ? sub.prePostChecklist : []).join("\n"),
   );
   const [flairHint, setFlairHint] = useState(sub.flairHint ?? "");
 

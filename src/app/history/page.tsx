@@ -28,6 +28,10 @@ const VALID_STATUS: DraftStatus[] = ["draft", "approved", "posted", "rejected"];
 const VALID_VARIANT = ["x_thread", "ih_long", "reddit"] as const;
 const VALID_RATING = ["star", "flop", "neutral", "unrated"] as const;
 
+// Reads Postgres at request time — never statically prerender (build-time DB
+// reads are stale and can crash on prerender; BIPS-L7).
+export const dynamic = "force-dynamic";
+
 export default async function HistoryPage({
   searchParams,
 }: {

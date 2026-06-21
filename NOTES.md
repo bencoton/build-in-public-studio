@@ -4,6 +4,17 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-06-21 — Fix: jsonb `prepost_checklist` crash + DB pages made dynamic
+
+- **Build-blocking:** `vercel build` failed prerendering `/settings` — `TypeError: (a.prePostChecklist ?? []).join is not a function`. Reproduced locally first (Bug Diagnosis Loop, no fix-and-pray).
+- **Ground truth** (throwaway probe, same `db.ts` settings): `subreddits.prepost_checklist` is `jsonb` but **postgres.js returns it as a JSON string** here (`typeof 'string'`, `isArray false`), e.g. `'["…"]'`. The declared `string[] | null` type isn't enforced at the read boundary.
+- **⚠️ Bigger finding:** the same probe shows `moments.source_ref` (also jsonb) is **also a string** — and its `Array.isArray` guard silently falls through to `[]`. So `source_refs` has been **empty on every DB read** (affects moment-card badges, regenerate context, and on-demand Reddit draft source material — the generation path uses the in-memory refs so it's unaffected). The task cited `moments.ts` as a *good* precedent; it's actually the **same latent bug**. Flagged + recommended as a focused follow-up; **not** bundled into this scoped commit. Captured in **BIPS-L7**.
+- **Fix (this commit):**
+  - `subreddits.ts` — coerce `prepost_checklist` at the read choke point (`coerceStringArray`/`rowToSubreddit`: parse string → guard `Array.isArray` → filter to strings → else null) in `getSubreddits`, `getSubredditBySlug`, and the `createSubreddit` RETURNING map. Declared type stays honest.
+  - `/settings` render — `Array.isArray(x) ? x : []` belt-and-braces on the `.join`.
+  - **All 9 DB-reading pages** get `export const dynamic = "force-dynamic"` — they were being statically prerendered against the **prod DB at build time**, which both reads prod during the build and turns a bad read into a hard build failure.
+- **Verified:** `npx tsc --noEmit` + `npm run lint` clean (same 6 pre-existing warnings); `npm run build` now **succeeds** — route table shows every page as `ƒ (Dynamic)` and `/settings` no longer prerenders. Lesson **BIPS-L7** added. No new dependency.
+
 ## 2026-06-21 — User-managed subreddit catalog (add subs without a code change)
 
 - Implemented `docs/specs/user-managed-subreddits-spec.md`. Subreddits moved from the hardcoded `reddit-subs.ts` config (+ fixed-slug `CHECK`) to a user-managed DB catalog. Confirmed all spec-assumed consumers on the real checkout before starting.

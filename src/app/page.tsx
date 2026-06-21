@@ -32,6 +32,10 @@ export const maxDuration = 60;
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
+// Reads Postgres at request time — never statically prerender (build-time DB
+// reads are stale and can crash on prerender; BIPS-L7).
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage({
   searchParams,
 }: {

@@ -45,6 +45,35 @@ export type SubredditView = {
   submitUrl: string;
 };
 
+/**
+ * Coerce a jsonb-array column to a real string[] (or null).
+ *
+ * ⚠️ postgres.js returns jsonb columns in THIS app's config as JSON *strings*,
+ * not parsed arrays (the declared TS type is NOT enforced at the boundary —
+ * see CLAUDE.md BIPS-L7). So `prepost_checklist` arrives as e.g.
+ * '["a","b"]', and passing it through as string[] makes `.join`/`.map` blow up
+ * at render (this caused the /settings prerender crash). Parse + guard here, at
+ * the read choke point, so every consumer downstream gets a genuine array.
+ */
+function coerceStringArray(value: unknown): string[] | null {
+  let arr: unknown = value;
+  if (typeof arr === "string") {
+    try {
+      arr = JSON.parse(arr);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(arr)) return null;
+  const out = arr.filter((x): x is string => typeof x === "string");
+  return out.length > 0 ? out : null;
+}
+
+/** Spread a raw DB row into a plain object AND coerce its jsonb array column. */
+function rowToSubreddit(r: SubredditRow): SubredditRow {
+  return { ...r, prepost_checklist: coerceStringArray(r.prepost_checklist) };
+}
+
 export function toView(row: SubredditRow): SubredditView {
   return {
     slug: row.slug,
@@ -97,7 +126,7 @@ export async function getSubreddits(): Promise<SubredditRow[]> {
   const rows = await sql<SubredditRow[]>`
     SELECT ${SELECT_COLS} FROM subreddits ORDER BY created_at ASC, id ASC
   `;
-  return rows.map((r) => ({ ...r }));
+  return rows.map(rowToSubreddit);
 }
 
 /** Catalog mapped to client-safe views (plain objects + derived submit URL). */
@@ -113,7 +142,7 @@ export async function getSubredditBySlug(
   const rows = await sql<SubredditRow[]>`
     SELECT ${SELECT_COLS} FROM subreddits WHERE slug = ${slug} LIMIT 1
   `;
-  return rows[0] ? { ...rows[0] } : null;
+  return rows[0] ? rowToSubreddit(rows[0]) : null;
 }
 
 // ── Mutations ──────────────────────────────────────────────────────────────
@@ -176,7 +205,7 @@ export async function createSubreddit(
     )
     RETURNING ${SELECT_COLS}
   `;
-  return { ...rows[0] };
+  return rowToSubreddit(rows[0]);
 }
 
 /** Edit a sub's optional rule fields (slug/display_name are immutable — the

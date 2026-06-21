@@ -21,6 +21,9 @@ import { SyncButton } from "./sync-button";
 // "Sync GitHub" button (wired in Stage 6). The whole page is server-rendered;
 // the only client island is the Sync button.
 
+// Reads Postgres at request time — never statically prerender (BIPS-L7).
+export const dynamic = "force-dynamic";
+
 export default async function DebugCommitsPage() {
   const [watched, lastSyncedAt, countsByRepo, commits] = await Promise.all([
     getWatchedRepos(),

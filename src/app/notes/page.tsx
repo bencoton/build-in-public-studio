@@ -11,6 +11,10 @@ import { DeleteNoteButton } from "./delete-note-button";
 // the database read happens server-side during render — no API route needed.
 // The form below is a Client Component for its interactivity.
 
+// Reads Postgres at request time — never statically prerender (build-time DB
+// reads are stale and can crash on prerender; BIPS-L7).
+export const dynamic = "force-dynamic";
+
 export default async function NotesPage() {
   const [notes, watchedRepos] = await Promise.all([
     getRecentNotes(50),

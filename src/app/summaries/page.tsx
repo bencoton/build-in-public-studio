@@ -22,6 +22,8 @@ import { LaunchSummaryCard } from "./launch-summary-card";
 // Server-action-driven Claude calls. Website summary ~20-30s; launch
 // announcement ~30-50s. Both fit in Hobby's 60s cap.
 export const maxDuration = 60;
+// Reads Postgres at request time — never statically prerender (BIPS-L7).
+export const dynamic = "force-dynamic";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 

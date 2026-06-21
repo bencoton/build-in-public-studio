@@ -6,6 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { getScheduledDrafts } from "@/lib/history";
 import { displayProjectName, variantLabel } from "@/lib/format";
 
+// Reads Postgres at request time — never statically prerender (BIPS-L7).
+export const dynamic = "force-dynamic";
+
 export default async function ScheduledPage() {
   // Show the next 60 days so users can see everything they have queued up.
   const drafts = await getScheduledDrafts(60);
