@@ -4,6 +4,12 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-06-21 — Reddit drafts in their own tab (UX fix)
+
+- **Bug:** Reddit was rendered as a separate `<RedditSection>` *below* the X/IH tabs, so it visually attached to whatever tab was active (default X) and read as "part of the X post". Being on-demand, it was also easy to miss entirely.
+- **Fix (`moment-card.tsx` only):** promoted Reddit to a proper third tab. Tab order is now **X thread → Reddit → Indie Hackers** (still hand-rolled buttons — no `@radix-ui/react-tabs`, no new dep). The Reddit tab's panel renders the existing sub multi-select + per-sub `RedditDraftCard` list + empty state; the standalone below-tabs `RedditSection` call is gone. New `RedditTabDot` shows an aggregate dot on the Reddit tab — teal if any reddit draft is approved/posted, the neutral draft dot if reddit drafts exist but none are live, and nothing until the first is generated.
+- **Unchanged:** X/IH tab behaviour, and the Reddit generation path (`generateRedditDraftsAction` stays on-demand per moment). No data-layer or generation changes. `npx tsc --noEmit` + `npm run lint` both clean.
+
 ## 2026-06-20 — Phase 1.5c shipped: Reddit drafting (Claude Code build session)
 
 - Built Campaign 1 from the implementation plan. Reddit is now a first-class third platform alongside X and Indie Hackers.

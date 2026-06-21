@@ -43,9 +43,12 @@ import {
 import { CopyOpenFlow } from "./copy-open-flow";
 import { ScheduledDateEditor } from "./scheduled-date-editor";
 
-type Variant = "x_thread" | "ih_long";
+type Variant = "x_thread" | "reddit" | "ih_long";
+// Tab order: X thread → Reddit → Indie Hackers.
+const TAB_ORDER: Variant[] = ["x_thread", "reddit", "ih_long"];
 const VARIANT_LABEL: Record<Variant, string> = {
   x_thread: "X thread",
+  reddit: "Reddit",
   ih_long: "Indie Hackers",
 };
 
@@ -54,7 +57,14 @@ export function MomentCard({ moment }: { moment: MomentWithDrafts }) {
 
   const xThread = moment.drafts.find((d) => d.variant === "x_thread");
   const ihLong = moment.drafts.find((d) => d.variant === "ih_long");
-  const active = activeTab === "x_thread" ? xThread : ihLong;
+  const redditDrafts = moment.drafts.filter((d) => d.variant === "reddit");
+  // The single-draft variants (X / IH); the Reddit tab renders RedditSection.
+  const active =
+    activeTab === "x_thread"
+      ? xThread
+      : activeTab === "ih_long"
+        ? ihLong
+        : undefined;
 
   return (
     <Card>
@@ -72,11 +82,11 @@ export function MomentCard({ moment }: { moment: MomentWithDrafts }) {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Hand-rolled tabs — two buttons + conditional content. Two tabs
-            don't justify pulling in @radix-ui/react-tabs. */}
+        {/* Hand-rolled tabs — three buttons + conditional content. Still
+            doesn't justify pulling in @radix-ui/react-tabs. */}
         <div className="flex gap-0 border-b">
-          {(["x_thread", "ih_long"] as const).map((v) => {
-            const draft = v === "x_thread" ? xThread : ihLong;
+          {TAB_ORDER.map((v) => {
+            const single = v === "x_thread" ? xThread : v === "ih_long" ? ihLong : undefined;
             return (
               <button
                 key={v}
@@ -90,31 +100,38 @@ export function MomentCard({ moment }: { moment: MomentWithDrafts }) {
                 )}
               >
                 {VARIANT_LABEL[v]}
-                {draft && <StatusDot status={draft.status} />}
+                {/* X/IH: per-draft dot. Reddit: aggregate dot only if any
+                    reddit draft exists (teal if any approved/posted). */}
+                {v === "reddit" ? (
+                  <RedditTabDot drafts={redditDrafts} />
+                ) : (
+                  single && <StatusDot status={single.status} />
+                )}
               </button>
             );
           })}
         </div>
 
-        {active ? (
+        {activeTab === "reddit" ? (
+          <RedditSection moment={moment} />
+        ) : active ? (
           <DraftVariant draft={active} />
         ) : (
           <p className="text-sm text-muted-foreground italic py-4">
             (missing — Claude didn&apos;t return this variant)
           </p>
         )}
-
-        <RedditSection moment={moment} />
       </CardContent>
     </Card>
   );
 }
 
 // ── Reddit section ────────────────────────────────────────────────────────
-// Lives below the X/IH tabs on each moment card. Lists any Reddit drafts that
-// already exist (one per sub) and offers a multi-select + generate for subs
-// that don't yet have a draft. Reuses DraftVariant for the body so edit /
-// regenerate / approve / reject / Copy+Open all behave exactly as for X/IH.
+// The Reddit tab's panel. Lists any Reddit drafts that already exist (one per
+// sub) and offers a multi-select + generate for subs that don't yet have a
+// draft. Reuses DraftVariant for the body so edit / regenerate / approve /
+// reject / Copy+Open all behave exactly as for X/IH. Reddit stays on-demand
+// per moment — generateRedditDraftsAction is unchanged.
 
 function RedditSection({ moment }: { moment: MomentWithDrafts }) {
   const redditDrafts = moment.drafts.filter((d) => d.variant === "reddit");
@@ -154,15 +171,11 @@ function RedditSection({ moment }: { moment: MomentWithDrafts }) {
   };
 
   return (
-    <div className="space-y-4 pt-4 border-t">
-      <div className="flex items-center gap-2">
-        <h4 className="text-sm font-medium flex items-center gap-1.5">
-          <span className="text-wyco-teal">Reddit</span>
-          <span className="text-xs font-normal text-muted-foreground">
-            — tailored per subreddit
-          </span>
-        </h4>
-      </div>
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        One draft per subreddit, each tailored to that community&apos;s tone and
+        self-promo rules.
+      </p>
 
       {/* Existing reddit drafts, one card per sub */}
       {redditDrafts.length > 0 ? (
@@ -610,4 +623,21 @@ function StatusDot({ status }: { status: DraftRow["status"] }) {
         ? "bg-muted-foreground"
         : "bg-foreground/30";
   return <span className={cn("size-1.5 rounded-full", color)} />;
+}
+
+/** Aggregate dot for the Reddit tab: nothing until at least one reddit draft
+ *  exists, then teal if any is approved/posted, else the neutral draft dot. */
+function RedditTabDot({ drafts }: { drafts: DraftRow[] }) {
+  if (drafts.length === 0) return null;
+  const anyLive = drafts.some(
+    (d) => d.status === "approved" || d.status === "posted",
+  );
+  return (
+    <span
+      className={cn(
+        "size-1.5 rounded-full",
+        anyLive ? "bg-wyco-teal" : "bg-foreground/30",
+      )}
+    />
+  );
 }
