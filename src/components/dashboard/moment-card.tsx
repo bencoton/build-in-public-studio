@@ -33,13 +33,8 @@ import {
   generateRedditDraftsAction,
 } from "@/app/dashboard-actions";
 import type { MomentWithDrafts, DraftRow } from "@/lib/moments";
-import {
-  SUBREDDIT_RULES,
-  SUB_SLUGS,
-  isSubSlug,
-  MAX_SUBS_PER_GENERATE,
-  type SubSlug,
-} from "@/lib/reddit-subs";
+import { MAX_SUBS_PER_GENERATE } from "@/lib/reddit-subs";
+import type { SubredditView } from "@/lib/subreddits";
 import { CopyOpenFlow } from "./copy-open-flow";
 import { ScheduledDateEditor } from "./scheduled-date-editor";
 
@@ -52,7 +47,13 @@ const VARIANT_LABEL: Record<Variant, string> = {
   ih_long: "Indie Hackers",
 };
 
-export function MomentCard({ moment }: { moment: MomentWithDrafts }) {
+export function MomentCard({
+  moment,
+  subreddits,
+}: {
+  moment: MomentWithDrafts;
+  subreddits: SubredditView[];
+}) {
   const [activeTab, setActiveTab] = useState<Variant>("x_thread");
 
   const xThread = moment.drafts.find((d) => d.variant === "x_thread");
@@ -113,7 +114,7 @@ export function MomentCard({ moment }: { moment: MomentWithDrafts }) {
         </div>
 
         {activeTab === "reddit" ? (
-          <RedditSection moment={moment} />
+          <RedditSection moment={moment} subreddits={subreddits} />
         ) : active ? (
           <DraftVariant draft={active} />
         ) : (
@@ -133,28 +134,34 @@ export function MomentCard({ moment }: { moment: MomentWithDrafts }) {
 // reject / Copy+Open all behave exactly as for X/IH. Reddit stays on-demand
 // per moment — generateRedditDraftsAction is unchanged.
 
-function RedditSection({ moment }: { moment: MomentWithDrafts }) {
+function RedditSection({
+  moment,
+  subreddits,
+}: {
+  moment: MomentWithDrafts;
+  subreddits: SubredditView[];
+}) {
   const redditDrafts = moment.drafts.filter((d) => d.variant === "reddit");
 
+  // Subs that already have a draft on this moment (by slug); the picker only
+  // offers catalog subs not yet drafted.
   const draftedSubs = new Set(
-    redditDrafts
-      .map((d) => d.subreddit)
-      .filter((s): s is SubSlug => isSubSlug(s)),
+    redditDrafts.map((d) => d.subreddit).filter((s): s is string => !!s),
   );
-  const availableSubs = SUB_SLUGS.filter((s) => !draftedSubs.has(s));
+  const availableSubs = subreddits.filter((s) => !draftedSubs.has(s.slug));
 
-  const [selected, setSelected] = useState<SubSlug[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
   const [genError, setGenError] = useState<string | null>(null);
   const [genPending, startGenTransition] = useTransition();
 
-  const toggleSub = (sub: SubSlug) => {
+  const toggleSub = (slug: string) => {
     setGenError(null);
     setSelected((prev) =>
-      prev.includes(sub)
-        ? prev.filter((s) => s !== sub)
+      prev.includes(slug)
+        ? prev.filter((s) => s !== slug)
         : prev.length >= MAX_SUBS_PER_GENERATE
           ? prev
-          : [...prev, sub],
+          : [...prev, slug],
     );
   };
 
@@ -174,14 +181,14 @@ function RedditSection({ moment }: { moment: MomentWithDrafts }) {
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
         One draft per subreddit, each tailored to that community&apos;s tone and
-        self-promo rules.
+        self-promo rules. Manage the list in Settings → Manage subreddits.
       </p>
 
       {/* Existing reddit drafts, one card per sub */}
       {redditDrafts.length > 0 ? (
         <div className="space-y-4">
           {redditDrafts.map((d) => (
-            <RedditDraftCard key={d.id} draft={d} />
+            <RedditDraftCard key={d.id} draft={d} subreddits={subreddits} />
           ))}
         </div>
       ) : (
@@ -199,14 +206,14 @@ function RedditSection({ moment }: { moment: MomentWithDrafts }) {
         <div className="space-y-2.5">
           <div className="flex flex-wrap gap-2">
             {availableSubs.map((sub) => {
-              const isOn = selected.includes(sub);
+              const isOn = selected.includes(sub.slug);
               const atCap =
                 !isOn && selected.length >= MAX_SUBS_PER_GENERATE;
               return (
                 <button
-                  key={sub}
+                  key={sub.slug}
                   type="button"
-                  onClick={() => toggleSub(sub)}
+                  onClick={() => toggleSub(sub.slug)}
                   disabled={atCap || genPending}
                   className={cn(
                     "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
@@ -216,7 +223,7 @@ function RedditSection({ moment }: { moment: MomentWithDrafts }) {
                     atCap && "opacity-40 cursor-not-allowed",
                   )}
                 >
-                  {SUBREDDIT_RULES[sub].displayName}
+                  {sub.displayName}
                 </button>
               );
             })}
@@ -255,11 +262,23 @@ function RedditSection({ moment }: { moment: MomentWithDrafts }) {
   );
 }
 
-// One existing Reddit draft: title (with copy), the sub's pre-post checklist,
-// then the reused DraftVariant for the body + lifecycle + Copy+Open.
-function RedditDraftCard({ draft }: { draft: DraftRow }) {
-  const sub = isSubSlug(draft.subreddit) ? draft.subreddit : null;
-  const rule = sub ? SUBREDDIT_RULES[sub] : null;
+// One existing Reddit draft: title (with copy), the sub's pre-post checklist
+// (when it has rules), then the reused DraftVariant for the body + lifecycle.
+function RedditDraftCard({
+  draft,
+  subreddits,
+}: {
+  draft: DraftRow;
+  subreddits: SubredditView[];
+}) {
+  // Resolve the draft's sub from the catalog. May be null if the sub was
+  // removed from the catalog — the draft still renders (slug-derived label).
+  const rule = subreddits.find((s) => s.slug === draft.subreddit) ?? null;
+  const hasRules =
+    !!rule &&
+    (!!rule.selfPromoRule ||
+      (rule.prePostChecklist != null && rule.prePostChecklist.length > 0) ||
+      !!rule.flairHint);
 
   return (
     <div className="rounded-md border p-3 space-y-3">
@@ -286,8 +305,9 @@ function RedditDraftCard({ draft }: { draft: DraftRow }) {
         </div>
       )}
 
-      {/* Pre-post checklist + self-promo rule for this sub (A0.4). */}
-      {rule && <PrePostChecklist rule={rule} />}
+      {/* Pre-post checklist + self-promo rule — only when this sub has rules.
+          A bare sub (name-only) hides the block. */}
+      {hasRules && rule && <PrePostChecklist rule={rule} />}
 
       {/* Body + edit / regenerate / approve / reject / Copy+Open — reused. */}
       <DraftVariant draft={draft} />
@@ -295,11 +315,7 @@ function RedditDraftCard({ draft }: { draft: DraftRow }) {
   );
 }
 
-function PrePostChecklist({
-  rule,
-}: {
-  rule: (typeof SUBREDDIT_RULES)[SubSlug];
-}) {
+function PrePostChecklist({ rule }: { rule: SubredditView }) {
   return (
     <details className="rounded-md border bg-muted/20 px-3 py-2 text-xs">
       <summary className="flex items-center gap-1.5 cursor-pointer font-medium text-muted-foreground">
@@ -307,15 +323,19 @@ function PrePostChecklist({
         Before you post to {rule.displayName} — self-promo rules
       </summary>
       <div className="pt-2 space-y-2">
-        <p className="text-muted-foreground">{rule.selfPromoRule}</p>
-        <ul className="space-y-1">
-          {rule.prePostChecklist.map((item, i) => (
-            <li key={i} className="flex items-start gap-1.5">
-              <Check className="size-3.5 mt-0.5 shrink-0 text-wyco-teal" />
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
+        {rule.selfPromoRule && (
+          <p className="text-muted-foreground">{rule.selfPromoRule}</p>
+        )}
+        {rule.prePostChecklist && rule.prePostChecklist.length > 0 && (
+          <ul className="space-y-1">
+            {rule.prePostChecklist.map((item, i) => (
+              <li key={i} className="flex items-start gap-1.5">
+                <Check className="size-3.5 mt-0.5 shrink-0 text-wyco-teal" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         {rule.flairHint && (
           <p className="text-muted-foreground italic">{rule.flairHint}</p>
         )}

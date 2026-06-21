@@ -10,6 +10,7 @@ import { Sparkles } from "lucide-react";
 import { getLatestGeneration, type MomentWithDrafts } from "@/lib/moments";
 import { relativeTime, displayProjectName } from "@/lib/format";
 import { getWatchedRepos } from "@/lib/settings";
+import { getSubredditViews } from "@/lib/subreddits";
 
 import { GenerateNowButton } from "@/components/dashboard/generate-now-button";
 import { MomentCard } from "@/components/dashboard/moment-card";
@@ -38,9 +39,10 @@ export default async function DashboardPage({
   // access silently returns undefined on client-side navigations).
   searchParams: Promise<SearchParams>;
 }) {
-  const [moments, watchedRepos, params] = await Promise.all([
+  const [moments, watchedRepos, subreddits, params] = await Promise.all([
     getLatestGeneration(),
     getWatchedRepos(),
+    getSubredditViews(),
     searchParams,
   ]);
   const latestAt = moments[0]?.created_at;
@@ -114,7 +116,11 @@ export default async function DashboardPage({
           ) : (
             <div className="space-y-4">
               {filteredMoments.map((moment) => (
-                <MomentCard key={moment.id} moment={moment} />
+                <MomentCard
+                  key={moment.id}
+                  moment={moment}
+                  subreddits={subreddits}
+                />
               ))}
             </div>
           )}

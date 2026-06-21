@@ -22,11 +22,16 @@ import { getStarredExamples, type HistoryDraft } from "./history";
 import { stagger } from "./scheduling";
 import { variantLabel } from "./format";
 import {
-  SUBREDDIT_RULES,
-  isSubSlug,
   MAX_SUBS_PER_GENERATE,
-  type SubSlug,
+  isValidSlug,
+  normalizeSlug,
+  submitUrlFor,
 } from "./reddit-subs";
+import {
+  getSubreddits,
+  toView,
+  type SubredditView,
+} from "./subreddits";
 import { DRAFT_SYSTEM_PROMPT } from "@/prompts/draft-system";
 
 /*
@@ -511,14 +516,14 @@ export type RedditDraftContext = {
  */
 export async function draftRedditForSub(
   moment: RedditMomentInput,
-  subSlug: SubSlug,
+  sub: SubredditView,
   relevantCommits: CommitRow[],
   relevantNotes: NoteRow[],
   ctx: RedditDraftContext,
 ): Promise<{ title: string; body: string; usage: AnthropicUsage }> {
   const userMessage = buildRedditDraftMessage({
     moment,
-    subSlug,
+    sub,
     relevantCommits,
     relevantNotes,
     userBannedWords: ctx.userBannedWords,
@@ -546,7 +551,7 @@ export async function draftRedditForSub(
   const toolUse = response.content.find((b) => b.type === "tool_use");
   if (!toolUse || toolUse.type !== "tool_use") {
     throw new Error(
-      `Claude didn't call ${REDDIT_DRAFT_TOOL_NAME} for r/${subSlug}. Stop reason: ${response.stop_reason}.`,
+      `Claude didn't call ${REDDIT_DRAFT_TOOL_NAME} for ${sub.displayName}. Stop reason: ${response.stop_reason}.`,
     );
   }
 
@@ -557,7 +562,9 @@ export async function draftRedditForSub(
     typeof input.body !== "string" ||
     input.body.trim().length === 0
   ) {
-    throw new Error(`Claude returned a malformed Reddit draft for r/${subSlug}.`);
+    throw new Error(
+      `Claude returned a malformed Reddit draft for ${sub.displayName}.`,
+    );
   }
 
   return {
@@ -570,12 +577,52 @@ export async function draftRedditForSub(
 export type RedditGenerationResult = {
   /** Number of Reddit drafts inserted (one per sub generated). */
   count: number;
-  subs: SubSlug[];
+  subs: string[];
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
   cacheCreationTokens: number;
 };
+
+/** A slug not found in the catalog (e.g. removed after selection) still drafts,
+ *  using a generic steer. Synthesise a minimal view for it. */
+function fallbackSubView(slug: string): SubredditView {
+  return {
+    slug,
+    displayName: `r/${slug}`,
+    toneNote: null,
+    selfPromoRule: null,
+    prePostChecklist: null,
+    flairHint: null,
+    submitUrl: submitUrlFor(slug),
+  };
+}
+
+/** Resolve selected slugs to catalog views, falling back to a generic view for
+ *  any slug no longer in the catalog. */
+function resolveSubViews(
+  slugs: string[],
+  catalog: SubredditView[],
+): SubredditView[] {
+  const bySlug = new Map(catalog.map((s) => [s.slug, s]));
+  return slugs.map((slug) => bySlug.get(slug) ?? fallbackSubView(slug));
+}
+
+/** Validate, normalise, dedupe (case-insensitive), and cap a list of slugs. */
+function validateSubSlugs(raw: string[]): string[] {
+  const seen = new Set<string>();
+  const slugs: string[] = [];
+  for (const s of raw) {
+    if (typeof s !== "string") continue;
+    const slug = normalizeSlug(s);
+    const key = slug.toLowerCase();
+    if (isValidSlug(slug) && !seen.has(key)) {
+      seen.add(key);
+      slugs.push(slug);
+    }
+  }
+  return slugs.slice(0, MAX_SUBS_PER_GENERATE);
+}
 
 /**
  * On-demand Reddit generation from the dashboard: for one existing moment and
@@ -591,22 +638,10 @@ export async function generateRedditDrafts(args: {
   momentId: number;
   subs: string[];
 }): Promise<RedditGenerationResult> {
-  // ── Validate + dedupe + cap subs ──────────────────────────────────────
-  const seen = new Set<string>();
-  const subs: SubSlug[] = [];
-  for (const s of args.subs) {
-    if (isSubSlug(s) && !seen.has(s)) {
-      seen.add(s);
-      subs.push(s);
-    }
-  }
-  if (subs.length === 0) {
+  // ── Validate + normalise + dedupe + cap subs (freeform slugs now) ─────
+  const slugs = validateSubSlugs(args.subs);
+  if (slugs.length === 0) {
     throw new Error("Select at least one valid subreddit.");
-  }
-  if (subs.length > MAX_SUBS_PER_GENERATE) {
-    throw new Error(
-      `Pick at most ${MAX_SUBS_PER_GENERATE} subreddits per generation.`,
-    );
   }
 
   const key = getAnthropicKey();
@@ -619,14 +654,17 @@ export async function generateRedditDrafts(args: {
     throw new Error(`Moment ${args.momentId} not found.`);
   }
 
-  // ── Load source material + prefs + reddit voice examples once ─────────
-  const [allCommits, userBannedWords, styleNotes, voiceExamples] =
+  // ── Load source material + prefs + reddit voice examples + catalog ────
+  const [allCommits, userBannedWords, styleNotes, voiceExamples, catalog] =
     await Promise.all([
       getRecentCommits(500),
       getBannedWords(),
       getStyleNotes(),
       getStarredExamples(10, "reddit"),
+      getSubreddits(),
     ]);
+
+  const subViews = resolveSubViews(slugs, catalog.map(toView));
 
   // Filter to just this moment's referenced source material (same shape as
   // draftMoment): commits by SHA prefix, notes by numeric id.
@@ -652,7 +690,7 @@ export async function generateRedditDrafts(args: {
 
   // ── Generate all subs in parallel ─────────────────────────────────────
   const drafts = await Promise.all(
-    subs.map((sub) =>
+    subViews.map((sub) =>
       draftRedditForSub(
         {
           summary: moment.summary,
@@ -663,23 +701,23 @@ export async function generateRedditDrafts(args: {
         relevantCommits,
         relevantNotes,
         ctx,
-      ).then((r) => ({ sub, ...r })),
+      ).then((r) => ({ slug: sub.slug, ...r })),
     ),
   );
 
   // ── Persist (replace any prior still-draft row per sub) ───────────────
   for (const d of drafts) {
-    await deleteRedditDraftsForSub(args.momentId, d.sub);
+    await deleteRedditDraftsForSub(args.momentId, d.slug);
     await insertRedditDraft({
       momentId: args.momentId,
-      subreddit: d.sub,
+      subreddit: d.slug,
       title: d.title,
       content: d.body,
     });
   }
 
   const totals = aggregateUsage(drafts.map((d) => d.usage));
-  return { count: drafts.length, subs, ...totals };
+  return { count: drafts.length, subs: slugs, ...totals };
 }
 
 // ── Per-repo Reddit auto-generation (dashboard Generate path) ────────────
@@ -712,7 +750,7 @@ export async function generateRedditForRepo(
     cacheCreationTokens: 0,
   };
 
-  const subs = await getRedditSubs(repo);
+  const subs = await getRedditSubs(repo); // string[] of slugs
   if (subs.length === 0) return empty; // opt-in: off for this repo, no calls
 
   const moments = await getMomentsByGeneration(generationId);
@@ -723,8 +761,13 @@ export async function generateRedditForRepo(
     throw new Error("ANTHROPIC_API_KEY is not set. Configure it in Settings first.");
   }
 
+  // Resolve the saved slugs against the catalog (generic fallback for any that
+  // were removed). The 3-cap was already applied when the selection was saved.
+  const catalog = (await getSubreddits()).map(toView);
+  const subViews = resolveSubViews(subs, catalog);
+
   return withTimeout(
-    runRedditPass(subs, moments, key),
+    runRedditPass(subViews, moments, key),
     REDDIT_PASS_TIMEOUT_MS,
     `Reddit auto-generation timed out for ${repo}`,
   );
@@ -733,7 +776,7 @@ export async function generateRedditForRepo(
 /** The actual (moment × sub) draft + persist pass. Split out so the whole
  *  thing is a single promise withTimeout can race. */
 async function runRedditPass(
-  subs: SubSlug[],
+  subViews: SubredditView[],
   moments: MomentWithDrafts[],
   key: string,
 ): Promise<RedditGenerationResult> {
@@ -764,7 +807,7 @@ async function runRedditPass(
   type Job = {
     momentId: number;
     moment: { summary: string; source_type: string; source_refs: string[] };
-    sub: SubSlug;
+    sub: SubredditView;
     relevantCommits: CommitRow[];
     relevantNotes: NoteRow[];
   };
@@ -777,7 +820,7 @@ async function runRedditPass(
     const relevantNotes = (
       await Promise.all(noteIds.map((id) => getNoteById(Number(id))))
     ).filter((n): n is NoteRow => n !== null);
-    for (const sub of subs) {
+    for (const sub of subViews) {
       jobs.push({
         momentId: m.id,
         moment: {
@@ -801,23 +844,23 @@ async function runRedditPass(
         job.relevantCommits,
         job.relevantNotes,
         ctx,
-      ).then((r) => ({ momentId: job.momentId, sub: job.sub, ...r })),
+      ).then((r) => ({ momentId: job.momentId, slug: job.sub.slug, ...r })),
     ),
   );
 
   // Persist — replace any prior still-draft row per (moment × sub).
   for (const d of drafted) {
-    await deleteRedditDraftsForSub(d.momentId, d.sub);
+    await deleteRedditDraftsForSub(d.momentId, d.slug);
     await insertRedditDraft({
       momentId: d.momentId,
-      subreddit: d.sub,
+      subreddit: d.slug,
       title: d.title,
       content: d.body,
     });
   }
 
   const totals = aggregateUsage(drafted.map((d) => d.usage));
-  return { count: drafted.length, subs, ...totals };
+  return { count: drafted.length, subs: subViews.map((s) => s.slug), ...totals };
 }
 
 // ── User-message builders ─────────────────────────────────────────────────
@@ -918,17 +961,17 @@ function buildDraftMomentMessage(args: {
 
 function buildRedditDraftMessage(args: {
   moment: RedditMomentInput;
-  subSlug: SubSlug;
+  sub: SubredditView;
   relevantCommits: CommitRow[];
   relevantNotes: NoteRow[];
   userBannedWords: string[];
   styleNotes: string;
   voiceExamples: HistoryDraft[];
 }): string {
-  const rule = SUBREDDIT_RULES[args.subSlug];
+  const sub = args.sub;
   const parts: string[] = [];
 
-  parts.push(`# Draft a Reddit post for ${rule.displayName}\n`);
+  parts.push(`# Draft a Reddit post for ${sub.displayName}\n`);
 
   parts.push(`**Moment summary:** ${args.moment.summary}`);
   parts.push(`**Source type:** ${args.moment.source_type}`);
@@ -955,10 +998,20 @@ function buildRedditDraftMessage(args: {
 
   parts.push("\n---\n");
 
-  // Per-sub steering — the heart of "tailored, not relabelled" (A0.2).
-  parts.push(`## Target subreddit: ${rule.displayName}\n`);
-  parts.push(`**Tone for this sub:** ${rule.toneNote}\n`);
-  parts.push(`**This sub's self-promo norms:** ${rule.selfPromoRule}\n`);
+  // Per-sub steering — the heart of "tailored, not relabelled" (A0.2). For a
+  // bare sub (no tone/rules in the catalog), fall back to a generic journey
+  // steer and skip the per-sub tone line entirely.
+  parts.push(`## Target subreddit: ${sub.displayName}\n`);
+  if (sub.toneNote) {
+    parts.push(`**Tone for this sub:** ${sub.toneNote}\n`);
+  } else {
+    parts.push(
+      `**Tone:** Write a genuine build-in-public journey post for this community — honest, specific, first person. (No per-sub tone is configured for ${sub.displayName}.)\n`,
+    );
+  }
+  if (sub.selfPromoRule) {
+    parts.push(`**This sub's self-promo norms:** ${sub.selfPromoRule}\n`);
+  }
 
   // Journey-format contract (A0.3) — same guardrails as X/IH, Reddit-shaped.
   parts.push("## Required format — journey post\n");
@@ -978,7 +1031,7 @@ function buildRedditDraftMessage(args: {
   appendSharedPreferences(parts, args);
 
   parts.push(
-    `Write the title and body for a ${rule.displayName} post about the moment above, following the journey-format contract and this sub's tone. Tailor it to ${rule.displayName} specifically — do not produce generic text that would read identically on another sub. Call ${REDDIT_DRAFT_TOOL_NAME} with the title and body.`,
+    `Write the title and body for a ${sub.displayName} post about the moment above, following the journey-format contract and this sub's tone. Tailor it to ${sub.displayName} specifically — do not produce generic text that would read identically on another sub. Call ${REDDIT_DRAFT_TOOL_NAME} with the title and body.`,
   );
 
   return parts.join("\n");

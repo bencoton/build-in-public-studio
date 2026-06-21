@@ -17,8 +17,8 @@ export type DraftRow = {
   moment_id: number;
   variant: DraftVariant;
   content: string;
-  /** Reddit-only: target sub slug (one of the curated SUBREDDIT_RULES keys).
-   *  NULL for x_thread / ih_long (enforced by a DB CHECK constraint). */
+  /** Reddit-only: target sub slug (a slug from the user-managed subreddits
+   *  catalog). NULL for x_thread / ih_long (enforced by a DB CHECK constraint). */
   subreddit: string | null;
   /** Reddit-only: post title, stored separately from the self-text `content`.
    *  NULL for x_thread / ih_long. */

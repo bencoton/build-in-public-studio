@@ -1,44 +1,57 @@
 /*
-  Curated subreddit rules — the single source of truth for the four subs
-  Build-in-Public Studio drafts for. This is CODE, reviewed in PRs, applying
-  to all users. It is NOT scraped at runtime (deliberate non-goal in the spec):
-  subs change their rules rarely, and a stale-rule risk is cheaper and safer
-  than a crawler.
+  Seed data + isomorphic slug helpers for the Reddit subreddit catalog.
 
-  ⚠️  Curated snapshot — LAST REVIEWED 2026-06.
-  Reddit communities revise their self-promo policies occasionally. When the
-  rules below drift from a sub's actual posted rules, update this file and bump
-  the review date. Treat anything here as guidance for the human poster, not a
-  guarantee — the prePostChecklist exists precisely so Ben eyeballs the live
-  rules before pasting.
+  Subreddits used to be a hardcoded `SUBREDDIT_RULES` map keyed by a `SubSlug`
+  union. They now live in a user-managed DB catalog (`subreddits` table, see
+  src/lib/subreddits.ts). This file keeps two things:
 
-  Isomorphic: pure data + types, no server-only imports, safe to import from
-  client components (the moment card indexes SUBREDDIT_RULES for submit URLs
-  and checklists).
+    1. DEFAULT_SUBREDDITS — the four curated subs, seeded into the catalog on
+       first run (idempotent, via seedDefaultSubreddits in subreddits.ts) so
+       they keep their exact tone/rules. ⚠️ Curated snapshot — LAST REVIEWED
+       2026-06. The pre-post checklist exists so the human eyeballs the live
+       rules before pasting.
+
+    2. Pure, client-safe helpers (no DB, no server imports) — submitUrlFor,
+       normalizeSlug, isValidSlug, and the MAX_SUBS_PER_GENERATE cap — so both
+       server code and client components can use them.
+
+  Adding a sub no longer needs a code change: do it from Settings → Manage
+  subreddits. This file is only the seed + helpers.
 */
 
-export type SubSlug = "SaaS" | "indiehackers" | "SideProject" | "microsaas";
+/** Max subs selectable per project / per on-demand generate. Bounds cost + latency. */
+export const MAX_SUBS_PER_GENERATE = 3;
 
-export interface SubredditRule {
-  slug: SubSlug;
-  /** Display form, e.g. "r/SaaS". */
-  displayName: string;
-  /** One line fed into the Claude prompt to steer the draft's voice per sub. */
-  toneNote: string;
-  /** Human-readable summary of the sub's self-promo policy. Shown in the UI. */
-  selfPromoRule: string;
-  /** Checklist the user reviews before copying, to avoid mod-filter trips. */
-  prePostChecklist: string[];
-  /** Optional flair guidance (we surface it as text; we don't auto-select flair). */
-  flairHint?: string;
-  /** New-post page for this sub. */
-  submitUrl: string;
+/** New-post page for a sub. Derived from the slug, never stored (avoids drift). */
+export function submitUrlFor(slug: string): string {
+  return `https://www.reddit.com/r/${slug}/submit`;
 }
 
-const submitUrl = (slug: SubSlug) => `https://www.reddit.com/r/${slug}/submit`;
+/** Strip a leading "r/" (any case, optional leading slash) and trim. Returns
+ *  the bare slug candidate so "r/WebDev" and "WebDev" normalise the same. */
+export function normalizeSlug(raw: string): string {
+  return raw.trim().replace(/^\/?r\//i, "").trim();
+}
 
-export const SUBREDDIT_RULES: Record<SubSlug, SubredditRule> = {
-  SaaS: {
+/** Reddit slug shape: letters, digits, underscore, 1–50 chars. Matches the
+ *  drafts_subreddit_format_check added in migration 0005. */
+export function isValidSlug(slug: string): boolean {
+  return /^[A-Za-z0-9_]{1,50}$/.test(slug);
+}
+
+/** Shape of a curated seed entry. The DB catalog stores the same fields plus
+ *  id/timestamps; rule fields are optional for user-added subs. */
+export type DefaultSubreddit = {
+  slug: string;
+  displayName: string;
+  toneNote: string;
+  selfPromoRule: string;
+  prePostChecklist: string[];
+  flairHint?: string;
+};
+
+export const DEFAULT_SUBREDDITS: DefaultSubreddit[] = [
+  {
     slug: "SaaS",
     displayName: "r/SaaS",
     toneNote:
@@ -51,10 +64,10 @@ export const SUBREDDIT_RULES: Record<SubSlug, SubredditRule> = {
       "Mentioned your product at most once, and not in the title.",
       "Checked whether this week has a self-promo/feedback megathread you should use instead.",
     ],
-    flairHint: "Pick a flair that matches the post — e.g. 'Build In Public' or 'Self-Promotion' if the post links to your product.",
-    submitUrl: submitUrl("SaaS"),
+    flairHint:
+      "Pick a flair that matches the post — e.g. 'Build In Public' or 'Self-Promotion' if the post links to your product.",
   },
-  indiehackers: {
+  {
     slug: "indiehackers",
     displayName: "r/indiehackers",
     toneNote:
@@ -68,9 +81,8 @@ export const SUBREDDIT_RULES: Record<SubSlug, SubredditRule> = {
       "Reads like a person reflecting, not like a landing page.",
     ],
     flairHint: "Use a flair like 'Sharing my story' / 'Milestone' if the sub offers one.",
-    submitUrl: submitUrl("indiehackers"),
   },
-  SideProject: {
+  {
     slug: "SideProject",
     displayName: "r/SideProject",
     toneNote:
@@ -84,9 +96,8 @@ export const SUBREDDIT_RULES: Record<SubSlug, SubredditRule> = {
       "Title describes the project plainly, no hype words.",
     ],
     flairHint: "Tag with the most fitting flair (e.g. 'Web App', 'Show & Tell') if required.",
-    submitUrl: submitUrl("SideProject"),
   },
-  microsaas: {
+  {
     slug: "microsaas",
     displayName: "r/microsaas",
     toneNote:
@@ -100,22 +111,5 @@ export const SUBREDDIT_RULES: Record<SubSlug, SubredditRule> = {
       "One clear takeaway a micro-SaaS builder can act on.",
     ],
     flairHint: "Add a 'Self-Promotion' or 'Build in Public' flair if the post links to your product.",
-    submitUrl: submitUrl("microsaas"),
   },
-};
-
-/** Ordered list for UI (multi-select, etc.). */
-export const SUB_SLUGS: SubSlug[] = [
-  "SaaS",
-  "indiehackers",
-  "SideProject",
-  "microsaas",
 ];
-
-/** Type guard — narrows an arbitrary DB string to a known SubSlug. */
-export function isSubSlug(value: unknown): value is SubSlug {
-  return typeof value === "string" && value in SUBREDDIT_RULES;
-}
-
-/** Max subs selectable per moment in one generate action (spec open question D6). */
-export const MAX_SUBS_PER_GENERATE = 3;

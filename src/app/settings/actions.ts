@@ -17,7 +17,16 @@ import {
   setBannedWords,
   setStyleNotes,
   setRedditSubs,
+  removeSubFromAllProjects,
 } from "@/lib/settings";
+import {
+  createSubreddit,
+  updateSubreddit,
+  deleteSubreddit,
+  type SubredditView,
+  type CreateSubredditInput,
+  type UpdateSubredditPatch,
+} from "@/lib/subreddits";
 
 // ── API-key validation ────────────────────────────────────────────────────
 
@@ -91,6 +100,69 @@ export async function saveRedditSubsAction(
           ? "Reddit auto-generation off for this repo."
           : `${subs.length} sub${subs.length === 1 ? "" : "s"} saved.`,
     };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    return { ok: false, error: message };
+  }
+}
+
+// ── Subreddit catalog CRUD (Manage subreddits) ────────────────────────────
+
+export type SubredditActionResult =
+  | { ok: true; subreddit: SubredditView }
+  | { ok: false; error: string };
+
+export async function createSubredditAction(
+  input: CreateSubredditInput,
+): Promise<SubredditActionResult> {
+  try {
+    if (!input.name?.trim()) {
+      return { ok: false, error: "Subreddit name is required." };
+    }
+    const row = await createSubreddit(input);
+    revalidatePath("/settings");
+    revalidatePath("/");
+    return {
+      ok: true,
+      subreddit: {
+        slug: row.slug,
+        displayName: row.display_name,
+        toneNote: row.tone_note,
+        selfPromoRule: row.self_promo_rule,
+        prePostChecklist: row.prepost_checklist,
+        flairHint: row.flair_hint,
+        submitUrl: `https://www.reddit.com/r/${row.slug}/submit`,
+      },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    return { ok: false, error: message };
+  }
+}
+
+export async function updateSubredditAction(
+  slug: string,
+  patch: UpdateSubredditPatch,
+): Promise<SaveResult> {
+  try {
+    await updateSubreddit(slug, patch);
+    revalidatePath("/settings");
+    revalidatePath("/");
+    return { ok: true, message: `r/${slug} updated.` };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    return { ok: false, error: message };
+  }
+}
+
+export async function deleteSubredditAction(slug: string): Promise<SaveResult> {
+  try {
+    await deleteSubreddit(slug);
+    // OQ2: also drop it from every project's selection so it doesn't linger.
+    await removeSubFromAllProjects(slug);
+    revalidatePath("/settings");
+    revalidatePath("/");
+    return { ok: true, message: `r/${slug} removed.` };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return { ok: false, error: message };

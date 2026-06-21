@@ -6,11 +6,12 @@ import {
   getStyleNotes,
   getRedditSubs,
 } from "@/lib/settings";
-import type { SubSlug } from "@/lib/reddit-subs";
+import { getSubredditViews } from "@/lib/subreddits";
 
 import { ApiKeysSection } from "./api-keys-section";
 import { WatchedReposSection } from "./watched-repos-section";
 import { RedditAutoGenSection } from "./reddit-autogen-section";
+import { ManageSubredditsSection } from "./manage-subreddits-section";
 import { PreferencesForm } from "./preferences-form";
 
 // Async server component — env state is sync (just reads process.env), but
@@ -20,20 +21,22 @@ import { PreferencesForm } from "./preferences-form";
 
 export default async function SettingsPage() {
   const keys = readApiKeyState();
-  const [watched, scheduleCron, bannedWords, styleNotes] = await Promise.all([
-    getWatchedRepos(),
-    getScheduleCron(),
-    getBannedWords(),
-    getStyleNotes(),
-  ]);
+  const [watched, scheduleCron, bannedWords, styleNotes, subreddits] =
+    await Promise.all([
+      getWatchedRepos(),
+      getScheduleCron(),
+      getBannedWords(),
+      getStyleNotes(),
+      getSubredditViews(),
+    ]);
 
   // Each watched repo's Reddit auto-gen subs (parallel; empty = off).
   const redditSubsEntries = await Promise.all(
     watched.map(
-      async (repo) => [repo, await getRedditSubs(repo)] as [string, SubSlug[]],
+      async (repo) => [repo, await getRedditSubs(repo)] as [string, string[]],
     ),
   );
-  const redditSubs: Record<string, SubSlug[]> =
+  const redditSubs: Record<string, string[]> =
     Object.fromEntries(redditSubsEntries);
 
   return (
@@ -68,7 +71,12 @@ export default async function SettingsPage() {
         <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
           Reddit auto-generation
         </h3>
-        <RedditAutoGenSection repos={watched} initial={redditSubs} />
+        <RedditAutoGenSection
+          repos={watched}
+          catalog={subreddits}
+          initial={redditSubs}
+        />
+        <ManageSubredditsSection initialCatalog={subreddits} />
       </section>
 
       <section className="space-y-3">

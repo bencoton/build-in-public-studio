@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { markPostedAction } from "@/app/dashboard-actions";
 import { cn } from "@/lib/utils";
 import type { DraftRow } from "@/lib/moments";
-import { SUBREDDIT_RULES, isSubSlug } from "@/lib/reddit-subs";
+import { submitUrlFor } from "@/lib/reddit-subs";
 
 type Props = { draft: DraftRow };
 
@@ -26,8 +26,8 @@ type Props = { draft: DraftRow };
 function platformUrlFor(draft: DraftRow): string {
   if (draft.variant === "x_thread") return "https://x.com/compose/post";
   if (draft.variant === "ih_long") return "https://www.indiehackers.com/new-post";
-  if (draft.variant === "reddit" && isSubSlug(draft.subreddit)) {
-    return SUBREDDIT_RULES[draft.subreddit].submitUrl;
+  if (draft.variant === "reddit" && draft.subreddit) {
+    return submitUrlFor(draft.subreddit);
   }
   return "https://www.reddit.com/submit";
 }

@@ -17,21 +17,19 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { displayProjectName } from "@/lib/format";
-import {
-  SUBREDDIT_RULES,
-  SUB_SLUGS,
-  MAX_SUBS_PER_GENERATE,
-  type SubSlug,
-} from "@/lib/reddit-subs";
+import { MAX_SUBS_PER_GENERATE } from "@/lib/reddit-subs";
+import type { SubredditView } from "@/lib/subreddits";
 import { saveRedditSubsAction } from "./actions";
 
 type Props = {
   repos: string[];
-  /** repo → currently-selected subs. */
-  initial: Record<string, SubSlug[]>;
+  /** The subreddit catalog (curated + user-added) to choose from. */
+  catalog: SubredditView[];
+  /** repo → currently-selected sub slugs. */
+  initial: Record<string, string[]>;
 };
 
-export function RedditAutoGenSection({ repos, initial }: Props) {
+export function RedditAutoGenSection({ repos, catalog, initial }: Props) {
   if (repos.length === 0) {
     return (
       <Card>
@@ -53,25 +51,46 @@ export function RedditAutoGenSection({ repos, initial }: Props) {
           Pick the subreddits each project should draft for automatically when
           you click Generate. Up to {MAX_SUBS_PER_GENERATE} per project. Leave
           all unselected to keep Reddit off for that project (no Reddit calls).
-          You can still add a one-off sub from any moment&apos;s Reddit tab.
+          Manage the list of subreddits below. You can still add a one-off sub
+          from any moment&apos;s Reddit tab.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        {repos.map((repo) => (
-          <RepoRow key={repo} repo={repo} initial={initial[repo] ?? []} />
-        ))}
+        {catalog.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No subreddits in the catalog yet — add one under &quot;Manage
+            subreddits&quot; below.
+          </p>
+        ) : (
+          repos.map((repo) => (
+            <RepoRow
+              key={repo}
+              repo={repo}
+              catalog={catalog}
+              initial={initial[repo] ?? []}
+            />
+          ))
+        )}
       </CardContent>
     </Card>
   );
 }
 
-function RepoRow({ repo, initial }: { repo: string; initial: SubSlug[] }) {
-  const [selected, setSelected] = useState<SubSlug[]>(initial);
+function RepoRow({
+  repo,
+  catalog,
+  initial,
+}: {
+  repo: string;
+  catalog: SubredditView[];
+  initial: string[];
+}) {
+  const [selected, setSelected] = useState<string[]>(initial);
   const [pending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const persist = (next: SubSlug[]) => {
+  const persist = (next: string[]) => {
     setError(null);
     setSaved(false);
     startTransition(async () => {
@@ -84,12 +103,12 @@ function RepoRow({ repo, initial }: { repo: string; initial: SubSlug[] }) {
     });
   };
 
-  const toggle = (sub: SubSlug) => {
-    const next = selected.includes(sub)
-      ? selected.filter((s) => s !== sub)
+  const toggle = (slug: string) => {
+    const next = selected.includes(slug)
+      ? selected.filter((s) => s !== slug)
       : selected.length >= MAX_SUBS_PER_GENERATE
         ? selected // at cap — clicking a new pill is a no-op
-        : [...selected, sub];
+        : [...selected, slug];
     if (next === selected) return; // unchanged; don't save
     setSelected(next);
     persist(next);
@@ -116,14 +135,14 @@ function RepoRow({ repo, initial }: { repo: string; initial: SubSlug[] }) {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {SUB_SLUGS.map((sub) => {
-          const isOn = selected.includes(sub);
+        {catalog.map((sub) => {
+          const isOn = selected.includes(sub.slug);
           const atCap = !isOn && selected.length >= MAX_SUBS_PER_GENERATE;
           return (
             <button
-              key={sub}
+              key={sub.slug}
               type="button"
-              onClick={() => toggle(sub)}
+              onClick={() => toggle(sub.slug)}
               disabled={atCap || pending}
               className={cn(
                 "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
@@ -133,7 +152,7 @@ function RepoRow({ repo, initial }: { repo: string; initial: SubSlug[] }) {
                 atCap && "opacity-40 cursor-not-allowed",
               )}
             >
-              {SUBREDDIT_RULES[sub].displayName}
+              {sub.displayName}
             </button>
           );
         })}

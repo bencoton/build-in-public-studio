@@ -4,6 +4,17 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-06-21 — User-managed subreddit catalog (add subs without a code change)
+
+- Implemented `docs/specs/user-managed-subreddits-spec.md`. Subreddits moved from the hardcoded `reddit-subs.ts` config (+ fixed-slug `CHECK`) to a user-managed DB catalog. Confirmed all spec-assumed consumers on the real checkout before starting.
+- **Schema:** applied migration `0005` to Neon via a throwaway transactional runner — `subreddits` table; **dropped** `drafts_subreddit_check`; **added** `drafts_subreddit_format_check` (`^[A-Za-z0-9_]{1,50}$`); **kept** `drafts_reddit_subreddit_check`; **no FK** `drafts.subreddit → subreddits.slug` so removing a sub never orphans historical drafts. Verified (9 columns, 2 constraints), runner deleted.
+- **Data layer:** new `src/lib/subreddits.ts` — `SubredditRow`/`SubredditView` + `toView`, `getSubreddits`/`getSubredditViews`/`getSubredditBySlug`, `createSubreddit`/`updateSubreddit`/`deleteSubreddit`, `submitUrlFor`. Slug validation (`^[A-Za-z0-9_]{1,50}$`, strip leading `r/`, case-insensitive dedupe); only name required. Rows spread before client boundaries (BIPS-L4).
+- **Seed:** `reddit-subs.ts` is now `DEFAULT_SUBREDDITS` + isomorphic helpers (`submitUrlFor`, `normalizeSlug`, `isValidSlug`, `MAX_SUBS_PER_GENERATE`). `seedDefaultSubreddits()` (`INSERT … ON CONFLICT (slug) DO NOTHING`) runs once, **flag-guarded** (`subreddits.seeded`) so deleting all subs later won't re-seed them. Dropped the `SubSlug` union — slugs are validated strings now.
+- **Swap (9 files):** `SUBREDDIT_RULES`/`SubSlug`/`isSubSlug` removed across `claude.ts`, `claude-regenerate.ts`, `copy-open-flow.tsx`, `moment-card.tsx`, `settings.ts`, `reddit-autogen-section.tsx`, `settings/page.tsx`. Client components (moment card, settings sections) receive the catalog as **props** from server components (dashboard + settings pages); `copy-open-flow` derives the submit URL from the slug (no catalog needed).
+- **Settings:** new "Manage subreddits" CRUD — add (name required; tone/self-promo/checklist/flair optional, with a placeholder nudging the self-promo rule), edit, remove. The per-project selector lists the catalog. Removing a sub also drops it from every project's `reddit.subs.<repo>` (OQ2).
+- **Generation:** `draftRedditForSub` + `generateRedditForRepo`/`generateRedditDrafts` read tone/rules from the catalog; blank fields → a generic journey steer (no per-sub tone line) and the moment card hides the checklist block. Journey format + banned words + `[VERIFY]` + the 3-cap are unchanged. A slug removed from the catalog still drafts (generic fallback), and historical drafts keep rendering.
+- **Verification:** `npx tsc --noEmit` + `npm run lint` clean (same 6 pre-existing react-hooks warnings). No new npm dependency.
+
 ## 2026-06-21 — Per-project Reddit subs + auto-generate on the dashboard (v1: dashboard-only)
 
 - Implemented `docs/specs/reddit-auto-generation-spec.md` v1 — **dashboard path only**, cron half deferred per the spec's open question 1 (its single 60s invocation loops all repos; adding Reddit there needs the budget addressed first). Confirmed all spec-assumed symbols existed on the real checkout before building.

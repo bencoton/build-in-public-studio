@@ -1,8 +1,8 @@
 import sql from "./db";
 import {
-  isSubSlug,
   MAX_SUBS_PER_GENERATE,
-  type SubSlug,
+  isValidSlug,
+  normalizeSlug,
 } from "./reddit-subs";
 
 /*
@@ -108,25 +108,30 @@ export async function setStyleNotes(notes: string): Promise<void> {
 //
 // Which subreddits the normal Generate run should auto-draft for, per repo.
 // Stored as a JSON slug array under `reddit.subs.<repo>`. Unset/empty = OFF
-// (opt-in — repos with no selection make zero Reddit calls). Validated against
-// SUB_SLUGS and capped at MAX_SUBS_PER_GENERATE on both read and write so a
-// hand-edited or stale value can never exceed the budget or smuggle in a bad
-// slug.
+// (opt-in — repos with no selection make zero Reddit calls). Slugs are now
+// freeform (user-managed catalog) — validated for FORMAT (not against a fixed
+// union), deduped case-insensitively, and capped at MAX_SUBS_PER_GENERATE on
+// both read and write so a hand-edited/stale value can't exceed the budget or
+// smuggle in a malformed slug. A stored slug whose catalog entry was later
+// removed stays valid here and just falls back to a generic steer at draft time.
 
-function normalizeSubs(values: unknown): SubSlug[] {
+function normalizeSubs(values: unknown): string[] {
   if (!Array.isArray(values)) return [];
   const seen = new Set<string>();
-  const out: SubSlug[] = [];
+  const out: string[] = [];
   for (const v of values) {
-    if (isSubSlug(v) && !seen.has(v)) {
-      seen.add(v);
-      out.push(v);
+    if (typeof v !== "string") continue;
+    const slug = normalizeSlug(v);
+    const key = slug.toLowerCase();
+    if (isValidSlug(slug) && !seen.has(key)) {
+      seen.add(key);
+      out.push(slug);
     }
   }
   return out.slice(0, MAX_SUBS_PER_GENERATE);
 }
 
-export async function getRedditSubs(repo: string): Promise<SubSlug[]> {
+export async function getRedditSubs(repo: string): Promise<string[]> {
   const raw = await getSetting(`reddit.subs.${repo}`);
   if (!raw) return [];
   try {
@@ -138,9 +143,24 @@ export async function getRedditSubs(repo: string): Promise<SubSlug[]> {
 
 export async function setRedditSubs(
   repo: string,
-  subs: SubSlug[] | string[],
+  subs: string[],
 ): Promise<void> {
   await setSetting(`reddit.subs.${repo}`, JSON.stringify(normalizeSubs(subs)));
+}
+
+/** Drop a slug from every project's selection — used when a sub is removed
+ *  from the catalog (spec OQ2) so a deleted sub doesn't linger in selections. */
+export async function removeSubFromAllProjects(slug: string): Promise<void> {
+  const repos = await getWatchedRepos();
+  for (const repo of repos) {
+    const subs = await getRedditSubs(repo);
+    if (subs.includes(slug)) {
+      await setRedditSubs(
+        repo,
+        subs.filter((s) => s !== slug),
+      );
+    }
+  }
 }
 
 /** Last successful generation timestamp (ISO 8601). Null if never run. */

@@ -3,7 +3,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getAnthropicKey } from "./env-keys";
 import { getBannedWords, getStyleNotes } from "./settings";
 import { getDraftWithMoment, updateDraftContent } from "./draft-mutations";
-import { SUBREDDIT_RULES, isSubSlug } from "./reddit-subs";
+import { isValidSlug } from "./reddit-subs";
+import { getSubredditBySlug } from "./subreddits";
 import { DRAFT_SYSTEM_PROMPT } from "@/prompts/draft-system";
 
 /*
@@ -63,9 +64,12 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
   ) {
     throw new Error(`Unknown variant: ${draft.variant}`);
   }
-  if (draft.variant === "reddit" && !isSubSlug(draft.subreddit)) {
+  if (
+    draft.variant === "reddit" &&
+    (!draft.subreddit || !isValidSlug(draft.subreddit))
+  ) {
     throw new Error(
-      `Reddit draft ${draftId} has an unknown subreddit: ${draft.subreddit}`,
+      `Reddit draft ${draftId} has a malformed subreddit: ${draft.subreddit}`,
     );
   }
 
@@ -84,17 +88,28 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
   ]);
 
   // Reddit redrafts the self-text BODY (title is preserved). X/IH redraft the
-  // single content blob.
-  const rule = draft.variant === "reddit" && isSubSlug(draft.subreddit)
-    ? SUBREDDIT_RULES[draft.subreddit]
-    : null;
+  // single content blob. Rule comes from the catalog; a removed sub falls back
+  // to a generic steer (display name only).
+  let rule:
+    | { displayName: string; toneNote: string | null; selfPromoRule: string | null }
+    | null = null;
+  if (draft.variant === "reddit" && draft.subreddit) {
+    const row = await getSubredditBySlug(draft.subreddit);
+    rule = row
+      ? {
+          displayName: row.display_name,
+          toneNote: row.tone_note,
+          selfPromoRule: row.self_promo_rule,
+        }
+      : { displayName: `r/${draft.subreddit}`, toneNote: null, selfPromoRule: null };
+  }
 
   const variantLabel =
     draft.variant === "x_thread"
       ? "X thread (numbered tweets, each under 280 chars, strong opening hook)"
       : draft.variant === "ih_long"
         ? "Indie Hackers long-form post (300-600 words, conversational, one clear takeaway)"
-        : `${rule!.displayName} post BODY in journey format (honest, real numbers or [VERIFY], a what-went-wrong beat, one specific insight, no forced CTA). Keep the existing title — redraft the self-text only.`;
+        : `${rule?.displayName ?? "Reddit"} post BODY in journey format (honest, real numbers or [VERIFY], a what-went-wrong beat, one specific insight, no forced CTA). Keep the existing title — redraft the self-text only.`;
 
   const parts: string[] = [
     `# Regenerate one variant`,
@@ -111,8 +126,9 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
 
   if (rule) {
     parts.push(`Target subreddit: ${rule.displayName}`);
-    parts.push(`Tone for this sub: ${rule.toneNote}`);
-    parts.push(`This sub's self-promo norms: ${rule.selfPromoRule}`);
+    if (rule.toneNote) parts.push(`Tone for this sub: ${rule.toneNote}`);
+    if (rule.selfPromoRule)
+      parts.push(`This sub's self-promo norms: ${rule.selfPromoRule}`);
     if (draft.title) parts.push(`Existing title (keep as-is): ${draft.title}`);
     parts.push("");
   }
