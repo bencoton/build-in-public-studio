@@ -4,6 +4,14 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-06-21 — Fix: coerce moments.source_ref jsonb to array on read (restores source context)
+
+- Sibling fix to BIPS-L7. The probe from the previous commit confirmed `moments.source_ref` (jsonb) comes back from postgres.js as a **string**; its `Array.isArray`-only guard silently yielded `[]`, so `source_refs` was empty on **every DB read** — blank SHA badges on moment cards, degraded regenerate context, and on-demand Reddit drafts missing their commit/note context.
+- **Extracted `coerceStringArray` to a shared `src/lib/json.ts`** (one helper, no copies); `subreddits.ts` now imports it instead of its local copy. Applied it at the **three** `source_ref` mapping sites: `getMomentById`, `getMomentsByGeneration`, and `claude-regenerate` (the mapper of `getDraftWithMoment`'s row). Removed the `Array.isArray`-only guards that masked the bug, and fixed the misleading "postgres.js parses it for us" comment.
+- **Ground truth** (throwaway probe on real data, then deleted): **before** fix `source_refs` = `0` for every moment; **after** fix `source_refs` populate with real SHAs and the exact on-demand `relevantCommits` filter returns **1–5 matches per moment** (against 213 commits in the DB). Regenerate uses the same data path.
+- **BIPS-L7 updated:** `moments.source_ref` marked ✅ RESOLVED; `coerceStringArray` (`src/lib/json.ts`) named the canonical helper for all jsonb array columns.
+- **Verified:** `npx tsc --noEmit` + `npm run lint` clean (same 6 pre-existing warnings); `npm run build` succeeds. No new dependency.
+
 ## 2026-06-21 — Fix: jsonb `prepost_checklist` crash + DB pages made dynamic
 
 - **Build-blocking:** `vercel build` failed prerendering `/settings` — `TypeError: (a.prePostChecklist ?? []).join is not a function`. Reproduced locally first (Bug Diagnosis Loop, no fix-and-pray).

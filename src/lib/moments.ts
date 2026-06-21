@@ -1,10 +1,13 @@
 import sql from "./db";
+import { coerceStringArray } from "./json";
 
 export type MomentRow = {
   id: number;
   summary: string;
   source_type: string; // 'commit' | 'note' | 'mixed' (constrained by Claude, not the DB)
-  source_ref: unknown; // jsonb — typically string[] | null; Claude guarantees the shape
+  // jsonb — but postgres.js returns it as a JSON *string* here, not an array
+  // (BIPS-L7). Always run it through coerceStringArray to get a real string[].
+  source_ref: unknown;
   generation_id: string;
   created_at: Date;
   repo: string | null;
@@ -150,10 +153,8 @@ export async function getMomentById(
   const m = moments[0];
   if (!m) return null;
 
-  let sourceRefs: string[] = [];
-  if (Array.isArray(m.source_ref)) {
-    sourceRefs = m.source_ref.filter((s): s is string => typeof s === "string");
-  }
+  // jsonb arrives as a JSON string (BIPS-L7) — coerce at the read boundary.
+  const sourceRefs = coerceStringArray(m.source_ref) ?? [];
   return { ...m, source_refs: sourceRefs, drafts: [] };
 }
 
@@ -204,12 +205,8 @@ export async function getMomentsByGeneration(
   }
 
   return moments.map((m) => {
-    let sourceRefs: string[] = [];
-    if (Array.isArray(m.source_ref)) {
-      sourceRefs = m.source_ref.filter(
-        (s): s is string => typeof s === "string",
-      );
-    }
+    // jsonb arrives as a JSON string (BIPS-L7) — coerce at the read boundary.
+    const sourceRefs = coerceStringArray(m.source_ref) ?? [];
     // Sort drafts deterministically so the X / IH tabs always render in the
     // same order. ih_long < x_thread alphabetically.
     const sortedDrafts = (byMoment.get(m.id) ?? []).sort((a, b) =>

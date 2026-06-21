@@ -1,4 +1,5 @@
 import sql from "./db";
+import { coerceStringArray } from "./json";
 import { getSetting, setSetting } from "./settings";
 import {
   DEFAULT_SUBREDDITS,
@@ -45,31 +46,8 @@ export type SubredditView = {
   submitUrl: string;
 };
 
-/**
- * Coerce a jsonb-array column to a real string[] (or null).
- *
- * ⚠️ postgres.js returns jsonb columns in THIS app's config as JSON *strings*,
- * not parsed arrays (the declared TS type is NOT enforced at the boundary —
- * see CLAUDE.md BIPS-L7). So `prepost_checklist` arrives as e.g.
- * '["a","b"]', and passing it through as string[] makes `.join`/`.map` blow up
- * at render (this caused the /settings prerender crash). Parse + guard here, at
- * the read choke point, so every consumer downstream gets a genuine array.
- */
-function coerceStringArray(value: unknown): string[] | null {
-  let arr: unknown = value;
-  if (typeof arr === "string") {
-    try {
-      arr = JSON.parse(arr);
-    } catch {
-      return null;
-    }
-  }
-  if (!Array.isArray(arr)) return null;
-  const out = arr.filter((x): x is string => typeof x === "string");
-  return out.length > 0 ? out : null;
-}
-
-/** Spread a raw DB row into a plain object AND coerce its jsonb array column. */
+/** Spread a raw DB row into a plain object AND coerce its jsonb array column
+ *  (prepost_checklist arrives as a JSON string here — see BIPS-L7). */
 function rowToSubreddit(r: SubredditRow): SubredditRow {
   return { ...r, prepost_checklist: coerceStringArray(r.prepost_checklist) };
 }

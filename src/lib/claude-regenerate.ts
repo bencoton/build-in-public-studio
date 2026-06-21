@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getAnthropicKey } from "./env-keys";
 import { getBannedWords, getStyleNotes } from "./settings";
 import { getDraftWithMoment, updateDraftContent } from "./draft-mutations";
+import { coerceStringArray } from "./json";
 import { isValidSlug } from "./reddit-subs";
 import { getSubredditBySlug } from "./subreddits";
 import { DRAFT_SYSTEM_PROMPT } from "@/prompts/draft-system";
@@ -73,14 +74,11 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
     );
   }
 
-  // source_ref is jsonb — postgres.js parses it for us, not a TEXT-of-JSON
-  // string like in the SQLite era. So we just type-check the array shape.
-  let sourceRefs: string[] = [];
-  if (Array.isArray(moment.source_ref)) {
-    sourceRefs = moment.source_ref.filter(
-      (s): s is string => typeof s === "string",
-    );
-  }
+  // source_ref is jsonb but postgres.js returns it as a JSON *string* here
+  // (BIPS-L7); coerce at the read boundary so the regenerate prompt actually
+  // sees the moment's source refs (this is the mapping site for the row
+  // returned by getDraftWithMoment).
+  const sourceRefs = coerceStringArray(moment.source_ref) ?? [];
 
   const [userBannedWords, styleNotes] = await Promise.all([
     getBannedWords(),
