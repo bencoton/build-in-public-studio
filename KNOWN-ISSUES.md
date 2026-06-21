@@ -2,7 +2,7 @@
 
 ## Open
 
-(nothing right now)
+- **2026-06-20** — 6 `eslint-plugin-react-hooks` v7 warnings remain after the ESLint flat-config migration (Phase 1.5c). The two new v7 rules (`set-state-in-effect`, purity) were downgraded from error to warning to unblock the `npm run lint` gate; none are in the Reddit code. Locations: `theme-toggle.tsx`, `app-header.tsx` (next-themes mount guard / timer resets), `generate-now-button.tsx`, `batch-form.tsx`, `generate-button.tsx` (a `Date.now()` in render). **Polish task:** a dedicated pass to fix the underlying patterns (memoise/lift the `Date.now()` call, guard the effect set-states) and promote the two rules back to error. Tech debt only — no user-facing impact.
 
 ## Resolved
 

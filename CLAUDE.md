@@ -103,3 +103,15 @@ Ben. Beginner-leaning developer. Backend / scripting experience; mobile is newer
   Callers use \`transaction(() => { ... })\` exactly like the better-sqlite3 idiom.
 - **Cross-project rule:** Other better-sqlite3-only APIs that don't exist on `node:sqlite`: \`.pragma()\` (use \`db.exec("PRAGMA ...")\`), typed generics on \`.prepare<P, R>()\` (cast the result with \`as R\` instead), \`.iterate()\` (no streaming iterator; use \`.all()\` or call \`.get()\` in a loop), \`.backup()\` (no built-in backup helper). Before reaching for a better-sqlite3 idiom in this project, check the [`node:sqlite` docs](https://nodejs.org/api/sqlite.html) first.
 - **Detection signature:** Runtime error referencing a method on `db` that exists in better-sqlite3 but not in `node:sqlite`. Common variants: \`.transaction\`, \`.pragma\`, \`.iterate\`, \`.backup\`.
+
+### BIPS-L6 — Next 16 removed `next lint`; ESLint 9 ignores `.eslintrc.json` — the lint gate silently dies
+
+- **Symptom:** `npm run lint` (script was `"next lint"`) either errors that the command is gone or reports a false "clean". The required pre-commit lint gate is effectively off until a direct `eslint .` later surfaces a backlog of problems at once. First hit during the Phase 1.5c Reddit session (2026-06-20).
+- **Root cause:** Two breaking changes arrived together. (1) **Next.js 16 removed the `next lint` command** that the original `package.json` script depended on. (2) **ESLint 9 dropped the legacy `.eslintrc.json`** format for flat config (`eslint.config.mjs`) — a leftover `.eslintrc.json` is silently ignored.
+- **Fix recipe (proven here):**
+  1. `package.json`: `"lint": "next lint"` becomes `"lint": "eslint ."`.
+  2. Add `eslint.config.mjs` flat config reusing the **already-installed** `eslint-config-next` v16 presets (`next/core-web-vitals` + `next/typescript`) via FlatCompat — **no new dependency**.
+  3. **Delete the dead `.eslintrc.json`** (ignored under flat config; remove it so it doesn't mislead).
+  4. Triage what surfaces. `eslint-plugin-react-hooks` v7 rules (`set-state-in-effect`, purity) flag patterns ESLint 8 didn't — `Date.now()` in render, set-state in effects, the `next-themes` mount-guard timer. Fix the clear ones; downgrade only the *new* rules to `warn` to unblock the gate and log them in `KNOWN-ISSUES.md` for a dedicated pass (don't leave the whole gate red).
+- **Detection signature:** `npm run lint` says `next lint` is unknown, OR exits 0 with `.eslintrc.json` present and no `eslint.config.*`, OR `npx eslint .` finds problems `npm run lint` missed.
+- **Cross-project version:** promoted to `docs/Ways-of-Working.md` Part 9 as **L15** — every project taking the Next 14→16 bump must migrate ESLint to flat config in the same session and re-verify the lint gate actually runs.

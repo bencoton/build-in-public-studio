@@ -4,6 +4,13 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-06-21 — Suspected BIPS-L8 NUL corruption: investigated, none found
+
+- Opened this session to recover from a suspected BIPS-L8 recurrence (NUL-byte corruption of source files + clobbered lesson docs). **Per the Bug Diagnosis Loop, verified before touching anything — and the premise did not hold in this working tree.**
+- **NUL scan of all 111 tracked files:** the only files containing NUL bytes are legitimate binaries (6 `docs/screenshots/*.jpg`, `src/app/favicon.ico`). **Zero text/source files corrupted.** No CRLF churn beyond the usual; `git status` showed only `CLAUDE.md` + `KNOWN-ISSUES.md` modified.
+- **The "lost" lesson edits were not lost** — they were sitting intact as uncommitted changes, and *more complete* than the re-apply sketches: `CLAUDE.md` already had the full **BIPS-L6** lesson (Next 16 removed `next lint` / ESLint 9 ignores `.eslintrc.json`), `KNOWN-ISSUES.md` already had the 6 react-hooks-v7-warnings entry. `NOTES.md`/`PROJECT.md` carried the Reddit + tab session entries (committed). `docs/Ways-of-Working.md` (gitignored) still contained `### L15`.
+- **Action taken:** no `git restore`, no re-apply (both would have *deleted* good content). Committed the existing `CLAUDE.md` + `KNOWN-ISSUES.md` edits as-is, after `git add --renormalize` to settle line endings and a clean `tsc` + `lint` pass. BIPS-L8 did **not** recur this session.
+
 ## 2026-06-21 — Reddit drafts in their own tab (UX fix)
 
 - **Bug:** Reddit was rendered as a separate `<RedditSection>` *below* the X/IH tabs, so it visually attached to whatever tab was active (default X) and read as "part of the X post". Being on-demand, it was also easy to miss entirely.
