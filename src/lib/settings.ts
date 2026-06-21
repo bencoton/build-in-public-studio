@@ -1,4 +1,9 @@
 import sql from "./db";
+import {
+  isSubSlug,
+  MAX_SUBS_PER_GENERATE,
+  type SubSlug,
+} from "./reddit-subs";
 
 /*
   Key-value settings, backed by Postgres. Used for:
@@ -97,6 +102,45 @@ export async function getStyleNotes(): Promise<string> {
 
 export async function setStyleNotes(notes: string): Promise<void> {
   await setSetting("style_notes", notes);
+}
+
+// ── Per-project Reddit auto-generation subs ────────────────────────────────
+//
+// Which subreddits the normal Generate run should auto-draft for, per repo.
+// Stored as a JSON slug array under `reddit.subs.<repo>`. Unset/empty = OFF
+// (opt-in — repos with no selection make zero Reddit calls). Validated against
+// SUB_SLUGS and capped at MAX_SUBS_PER_GENERATE on both read and write so a
+// hand-edited or stale value can never exceed the budget or smuggle in a bad
+// slug.
+
+function normalizeSubs(values: unknown): SubSlug[] {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set<string>();
+  const out: SubSlug[] = [];
+  for (const v of values) {
+    if (isSubSlug(v) && !seen.has(v)) {
+      seen.add(v);
+      out.push(v);
+    }
+  }
+  return out.slice(0, MAX_SUBS_PER_GENERATE);
+}
+
+export async function getRedditSubs(repo: string): Promise<SubSlug[]> {
+  const raw = await getSetting(`reddit.subs.${repo}`);
+  if (!raw) return [];
+  try {
+    return normalizeSubs(JSON.parse(raw));
+  } catch {
+    return [];
+  }
+}
+
+export async function setRedditSubs(
+  repo: string,
+  subs: SubSlug[] | string[],
+): Promise<void> {
+  await setSetting(`reddit.subs.${repo}`, JSON.stringify(normalizeSubs(subs)));
 }
 
 /** Last successful generation timestamp (ISO 8601). Null if never run. */

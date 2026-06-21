@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { randomUUID } from "node:crypto";
 
 import { getAnthropicKey } from "./env-keys";
-import { getBannedWords, getStyleNotes } from "./settings";
+import { getBannedWords, getStyleNotes, getRedditSubs } from "./settings";
 import { getRecentNotes, getNoteById, type NoteRow } from "./notes";
 import {
   getRecentCommits,
@@ -14,7 +14,10 @@ import {
   insertRedditDraft,
   deleteRedditDraftsForSub,
   getMomentById,
+  getMomentsByGeneration,
+  type MomentWithDrafts,
 } from "./moments";
+import { withTimeout } from "./timeout";
 import { getStarredExamples, type HistoryDraft } from "./history";
 import { stagger } from "./scheduling";
 import { variantLabel } from "./format";
@@ -677,6 +680,144 @@ export async function generateRedditDrafts(args: {
 
   const totals = aggregateUsage(drafts.map((d) => d.usage));
   return { count: drafts.length, subs, ...totals };
+}
+
+// ── Per-repo Reddit auto-generation (dashboard Generate path) ────────────
+
+// Ceiling for the whole Reddit pass for one repo. The 3-sub cap + per-call
+// Anthropic 60s timeout + parallelism keep real time well under this; it's a
+// backstop so a stall surfaces a clear error instead of hanging.
+const REDDIT_PASS_TIMEOUT_MS = 90_000;
+
+/**
+ * Auto-generate Reddit drafts for one repo's just-finished generation, using
+ * that repo's saved sub selection (Settings → Reddit auto-generation). Runs as
+ * a separate bounded pass after the main X/IH generation, mirroring the
+ * on-demand `generateRedditDrafts` persistence (replace a still-draft row per
+ * moment×sub; never clobber approved/posted).
+ *
+ * Opt-in: if the repo has no subs selected, returns `{ count: 0 }` with NO
+ * Claude calls (cost-neutral vs today).
+ */
+export async function generateRedditForRepo(
+  repo: string,
+  generationId: string,
+): Promise<RedditGenerationResult> {
+  const empty: RedditGenerationResult = {
+    count: 0,
+    subs: [],
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+  };
+
+  const subs = await getRedditSubs(repo);
+  if (subs.length === 0) return empty; // opt-in: off for this repo, no calls
+
+  const moments = await getMomentsByGeneration(generationId);
+  if (moments.length === 0) return { ...empty, subs };
+
+  const key = getAnthropicKey();
+  if (!key) {
+    throw new Error("ANTHROPIC_API_KEY is not set. Configure it in Settings first.");
+  }
+
+  return withTimeout(
+    runRedditPass(subs, moments, key),
+    REDDIT_PASS_TIMEOUT_MS,
+    `Reddit auto-generation timed out for ${repo}`,
+  );
+}
+
+/** The actual (moment × sub) draft + persist pass. Split out so the whole
+ *  thing is a single promise withTimeout can race. */
+async function runRedditPass(
+  subs: SubSlug[],
+  moments: MomentWithDrafts[],
+  key: string,
+): Promise<RedditGenerationResult> {
+  // Load shared source material + prefs + reddit voice examples once.
+  const [allCommits, userBannedWords, styleNotes, voiceExamples] =
+    await Promise.all([
+      getRecentCommits(500),
+      getBannedWords(),
+      getStyleNotes(),
+      getStarredExamples(10, "reddit"),
+    ]);
+
+  const client = new Anthropic({
+    apiKey: key,
+    maxRetries: 0,
+    timeout: ANTHROPIC_TIMEOUT_MS,
+  });
+  const ctx: RedditDraftContext = {
+    client,
+    userBannedWords,
+    styleNotes,
+    voiceExamples,
+  };
+
+  // Build the (moment × sub) work list. Resolve each moment's relevant source
+  // material once (commits by SHA prefix; notes by numeric id), then fan the
+  // subs out across it.
+  type Job = {
+    momentId: number;
+    moment: { summary: string; source_type: string; source_refs: string[] };
+    sub: SubSlug;
+    relevantCommits: CommitRow[];
+    relevantNotes: NoteRow[];
+  };
+  const jobs: Job[] = [];
+  for (const m of moments) {
+    const relevantCommits = allCommits.filter((c) =>
+      m.source_refs.some((ref) => c.sha === ref || c.sha.startsWith(ref)),
+    );
+    const noteIds = m.source_refs.filter((r) => /^\d+$/.test(r.trim()));
+    const relevantNotes = (
+      await Promise.all(noteIds.map((id) => getNoteById(Number(id))))
+    ).filter((n): n is NoteRow => n !== null);
+    for (const sub of subs) {
+      jobs.push({
+        momentId: m.id,
+        moment: {
+          summary: m.summary,
+          source_type: m.source_type,
+          source_refs: m.source_refs,
+        },
+        sub,
+        relevantCommits,
+        relevantNotes,
+      });
+    }
+  }
+
+  // Draft every (moment × sub) in parallel.
+  const drafted = await Promise.all(
+    jobs.map((job) =>
+      draftRedditForSub(
+        job.moment,
+        job.sub,
+        job.relevantCommits,
+        job.relevantNotes,
+        ctx,
+      ).then((r) => ({ momentId: job.momentId, sub: job.sub, ...r })),
+    ),
+  );
+
+  // Persist — replace any prior still-draft row per (moment × sub).
+  for (const d of drafted) {
+    await deleteRedditDraftsForSub(d.momentId, d.sub);
+    await insertRedditDraft({
+      momentId: d.momentId,
+      subreddit: d.sub,
+      title: d.title,
+      content: d.body,
+    });
+  }
+
+  const totals = aggregateUsage(drafted.map((d) => d.usage));
+  return { count: drafted.length, subs, ...totals };
 }
 
 // ── User-message builders ─────────────────────────────────────────────────

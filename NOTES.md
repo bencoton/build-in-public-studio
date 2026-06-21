@@ -4,6 +4,17 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-06-21 — Per-project Reddit subs + auto-generate on the dashboard (v1: dashboard-only)
+
+- Implemented `docs/specs/reddit-auto-generation-spec.md` v1 — **dashboard path only**, cron half deferred per the spec's open question 1 (its single 60s invocation loops all repos; adding Reddit there needs the budget addressed first). Confirmed all spec-assumed symbols existed on the real checkout before building.
+- **`settings.ts`:** `getRedditSubs(repo)` / `setRedditSubs(repo, subs)` over a `reddit.subs.<repo>` JSON-slug-array key. A shared `normalizeSubs` validates against `SUB_SLUGS`, dedupes, and caps at `MAX_SUBS_PER_GENERATE` on **both** read and write, so a stale/hand-edited value can't exceed the budget or smuggle a bad slug. Empty = off (opt-in).
+- **Settings page:** new "Reddit auto-generation" section (`reddit-autogen-section.tsx`) — per watched repo, the same sub-pill UI as the moment card; toggling a pill auto-saves via `saveRedditSubsAction` (per-repo pending/saved/error). Off-state and the 3-cap shown.
+- **`claude.ts`:** `generateRedditForRepo(repo, generationId)` — reads the repo's subs (empty → `{count:0}`, **zero Claude calls**), pulls the run's moments via `getMomentsByGeneration`, builds a (moment × sub) job list, drafts all in parallel with `draftRedditForSub`, then `deleteRedditDraftsForSub` + `insertRedditDraft` (same persistence as on-demand — replaces a still-draft row, never clobbers approved/posted). Whole pass wrapped in the shared `withTimeout` (90s). Extracted `withTimeout` to `src/lib/timeout.ts` so both `dashboard-actions` and `claude` reuse it.
+- **`dashboard-actions.ts`:** `generateRedditForRepoAction(repo, generationId)` (its own bounded invocation). `generateForRepoAction` already returns the `generationId` in its result, so the client just passes it on.
+- **`generate-now-button.tsx`:** after `generateForRepoAction(repo)` succeeds with moments, fires `generateRedditForRepoAction` as a second bounded step; new per-repo `reddit` sub-state ("drafting Reddit…") and a `+N Reddit` / `Reddit failed: …` line. A Reddit failure marks only that step failed and the loop continues to the next repo.
+- **Left as-is:** the per-moment Reddit picker (override). Cron route untouched.
+- **Verification:** `npx tsc --noEmit` + `npm run lint` clean (same 6 pre-existing react-hooks warnings). No new npm dependency.
+
 ## 2026-06-21 — Timeout guards on per-repo generate (no more infinite hang)
 
 - **Bug:** `generateForRepoAction` called `syncOneRepo` + `generateDrafts` with **no timeout**, unlike `generateAllDraftsAction` (which races its sync against 10s). A stalled GitHub or Anthropic call could hang the per-repo server action forever; the client loop `await`ed it, so the spinner ticked indefinitely and the per-repo queue stalled on the bad repo. Confirmed on the real checkout before fixing.

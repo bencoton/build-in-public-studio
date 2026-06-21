@@ -14,13 +14,21 @@ import { Sparkles, Loader2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   generateForRepoAction,
+  generateRedditForRepoAction,
   type GenerateActionResult,
+  type RedditGenerateActionResult,
 } from "@/app/dashboard-actions";
 
 type RepoStatus =
   | { state: "pending" }
   | { state: "running" }
-  | { state: "done"; result: GenerateActionResult };
+  // main X/IH generation done; the Reddit auto-gen pass is now running.
+  | { state: "reddit"; result: GenerateActionResult }
+  | {
+      state: "done";
+      result: GenerateActionResult;
+      reddit?: RedditGenerateActionResult;
+    };
 
 interface Props {
   repos: string[];
@@ -91,7 +99,34 @@ export function GenerateNowButton({ repos }: Props) {
           error: err instanceof Error ? err.message : "Timed out.",
         };
       }
-      setStatuses((prev) => ({ ...prev, [repo]: { state: "done", result } }));
+
+      // Second, bounded step: auto-generate Reddit drafts for this repo's run
+      // using its saved subs. Only worth a call when the main pass produced
+      // moments. A Reddit failure marks this step failed but does NOT block the
+      // queue — we still move on to the next repo.
+      if (result.ok && result.result.momentCount > 0) {
+        const generationId = result.result.generationId;
+        setStatuses((prev) => ({ ...prev, [repo]: { state: "reddit", result } }));
+        let reddit: RedditGenerateActionResult;
+        try {
+          reddit = await withClientTimeout(
+            generateRedditForRepoAction(repo, generationId),
+            CLIENT_CEILING_MS,
+            `${repo} Reddit drafting timed out. Moving on.`,
+          );
+        } catch (err) {
+          reddit = {
+            ok: false,
+            error: err instanceof Error ? err.message : "Reddit timed out.",
+          };
+        }
+        setStatuses((prev) => ({
+          ...prev,
+          [repo]: { state: "done", result, reddit },
+        }));
+      } else {
+        setStatuses((prev) => ({ ...prev, [repo]: { state: "done", result } }));
+      }
     }
 
     setRunning(false);
@@ -145,7 +180,7 @@ export function GenerateNowButton({ repos }: Props) {
                 {s.state === "pending" && (
                   <span className="text-muted-foreground">◦</span>
                 )}
-                {s.state === "running" && (
+                {(s.state === "running" || s.state === "reddit") && (
                   <Loader2 className="size-3 animate-spin text-wyco-teal" />
                 )}
                 {s.state === "done" && s.result.ok && (
@@ -155,14 +190,36 @@ export function GenerateNowButton({ repos }: Props) {
                   <span className="size-3 text-muted-foreground leading-none">–</span>
                 )}
                 <span>{repo}</span>
-                {s.state === "done" && s.result.ok && (
-                  <span className="text-muted-foreground">
-                    — {s.result.result.momentCount} moment
-                    {s.result.result.momentCount === 1 ? "" : "s"}
-                  </span>
-                )}
+
+                {/* Main X/IH result (shown once the main pass is done, incl.
+                    while the Reddit pass runs). */}
+                {(s.state === "reddit" || s.state === "done") &&
+                  s.result.ok && (
+                    <span className="text-muted-foreground">
+                      — {s.result.result.momentCount} moment
+                      {s.result.result.momentCount === 1 ? "" : "s"}
+                    </span>
+                  )}
                 {s.state === "done" && !s.result.ok && (
                   <span className="text-muted-foreground">{s.result.error}</span>
+                )}
+
+                {/* Reddit auto-gen sub-state. */}
+                {s.state === "reddit" && (
+                  <span className="text-muted-foreground">· drafting Reddit…</span>
+                )}
+                {s.state === "done" &&
+                  s.reddit &&
+                  s.reddit.ok &&
+                  s.reddit.result.count > 0 && (
+                    <span className="text-wyco-teal">
+                      · +{s.reddit.result.count} Reddit
+                    </span>
+                  )}
+                {s.state === "done" && s.reddit && !s.reddit.ok && (
+                  <span className="text-muted-foreground">
+                    · Reddit failed: {s.reddit.error}
+                  </span>
                 )}
               </li>
             );

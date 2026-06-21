@@ -16,6 +16,7 @@ import {
   setScheduleCron,
   setBannedWords,
   setStyleNotes,
+  setRedditSubs,
 } from "@/lib/settings";
 
 // ── API-key validation ────────────────────────────────────────────────────
@@ -61,6 +62,34 @@ export async function saveWatchedReposAction(
       message: repos.length === 0
         ? "Watched repos cleared."
         : `${repos.length} repo${repos.length === 1 ? "" : "s"} saved.`,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * Save the per-repo Reddit auto-generation subs. Called programmatically from
+ * the settings pills (not a form) with the full desired selection. Validation
+ * + the 3-sub cap live in setRedditSubs; empty list = auto-gen off for the repo.
+ */
+export async function saveRedditSubsAction(
+  repo: string,
+  subs: string[],
+): Promise<SaveResult> {
+  try {
+    if (!repo.trim()) {
+      return { ok: false, error: "Missing repo." };
+    }
+    await setRedditSubs(repo, subs);
+    revalidatePath("/settings");
+    return {
+      ok: true,
+      message:
+        subs.length === 0
+          ? "Reddit auto-generation off for this repo."
+          : `${subs.length} sub${subs.length === 1 ? "" : "s"} saved.`,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";

@@ -13,12 +13,14 @@ import { regenerateDraft, type RegenerateResult } from "@/lib/claude-regenerate"
 import {
   generateDrafts,
   generateRedditDrafts,
+  generateRedditForRepo,
   type GenerationResult,
   type RedditGenerationResult,
 } from "@/lib/claude";
 import { syncWatchedRepos, syncOneRepo } from "@/lib/github-sync";
 import { markDraftAsPosted } from "@/lib/posting";
 import { setLastRunAt } from "@/lib/settings";
+import { withTimeout } from "@/lib/timeout";
 
 // ── Generic result types ─────────────────────────────────────────────────
 
@@ -138,23 +140,7 @@ export async function markPostedAction(
   return { ok: true };
 }
 
-// ── Timeout helper ───────────────────────────────────────────────────────
-//
-// Race a promise against a timer that rejects after `ms`. The timer is always
-// cleared (via finally) so a winning promise doesn't leave a dangling timeout
-// keeping the serverless function alive. No dependency — plain Promise.race.
-
-function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  message: string,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
+// withTimeout lives in @/lib/timeout (shared with the Reddit auto-gen pass).
 
 // Ceilings for the per-repo path. Sync is non-fatal (we fall back to cached
 // commits); generation rejects with a clear, repo-named error so a stall
@@ -206,6 +192,27 @@ export async function generateForRepoAction(repo: string): Promise<GenerateActio
       `generation timed out for ${repo}`,
     );
     await setLastRunAt(new Date().toISOString());
+    revalidatePath("/");
+    return { ok: true, result };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    return { ok: false, error: message };
+  }
+}
+
+// ── Auto-generate Reddit drafts for a repo's run (dashboard, per-repo) ────
+//
+// Fired by the Generate button right after generateForRepoAction(repo) returns
+// its generationId. Uses the repo's saved subs (Settings); a no-op with zero
+// Claude calls if the repo has none selected. Its own bounded invocation, so a
+// failure/timeout here is surfaced per-repo and never blocks the queue.
+
+export async function generateRedditForRepoAction(
+  repo: string,
+  generationId: string,
+): Promise<RedditGenerateActionResult> {
+  try {
+    const result = await generateRedditForRepo(repo, generationId);
     revalidatePath("/");
     return { ok: true, result };
   } catch (err) {

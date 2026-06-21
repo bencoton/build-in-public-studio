@@ -4,10 +4,13 @@ import {
   getScheduleCron,
   getBannedWords,
   getStyleNotes,
+  getRedditSubs,
 } from "@/lib/settings";
+import type { SubSlug } from "@/lib/reddit-subs";
 
 import { ApiKeysSection } from "./api-keys-section";
 import { WatchedReposSection } from "./watched-repos-section";
+import { RedditAutoGenSection } from "./reddit-autogen-section";
 import { PreferencesForm } from "./preferences-form";
 
 // Async server component — env state is sync (just reads process.env), but
@@ -23,6 +26,15 @@ export default async function SettingsPage() {
     getBannedWords(),
     getStyleNotes(),
   ]);
+
+  // Each watched repo's Reddit auto-gen subs (parallel; empty = off).
+  const redditSubsEntries = await Promise.all(
+    watched.map(
+      async (repo) => [repo, await getRedditSubs(repo)] as [string, SubSlug[]],
+    ),
+  );
+  const redditSubs: Record<string, SubSlug[]> =
+    Object.fromEntries(redditSubsEntries);
 
   return (
     <div className="max-w-3xl mx-auto space-y-10">
@@ -50,6 +62,13 @@ export default async function SettingsPage() {
           githubSet={keys.github === "set"}
           initialWatched={watched}
         />
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+          Reddit auto-generation
+        </h3>
+        <RedditAutoGenSection repos={watched} initial={redditSubs} />
       </section>
 
       <section className="space-y-3">
