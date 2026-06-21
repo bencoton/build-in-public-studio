@@ -138,6 +138,30 @@ export async function markPostedAction(
   return { ok: true };
 }
 
+// ── Timeout helper ───────────────────────────────────────────────────────
+//
+// Race a promise against a timer that rejects after `ms`. The timer is always
+// cleared (via finally) so a winning promise doesn't leave a dangling timeout
+// keeping the serverless function alive. No dependency — plain Promise.race.
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+// Ceilings for the per-repo path. Sync is non-fatal (we fall back to cached
+// commits); generation rejects with a clear, repo-named error so a stall
+// surfaces instead of hanging forever.
+const SYNC_TIMEOUT_MS = 10_000;
+const GENERATE_TIMEOUT_MS = 90_000;
+
 // ── Generate + sync for one repo (per-repo orchestration) ────────────────
 //
 // The client calls this once per watched repo. Each call:
@@ -147,20 +171,40 @@ export async function markPostedAction(
 //
 // Keeping it per-repo means each server action call easily fits inside the
 // Vercel Hobby 60s function limit (~5-15s sync + ~35-45s generation).
+//
+// Both stages are time-boxed (mirroring generateAllDraftsAction's sync race)
+// so a stalled GitHub call or Anthropic connection can't hang this action
+// indefinitely — it either finishes or returns a clear timeout error, and the
+// client loop moves on to the next repo.
 
 export async function generateForRepoAction(repo: string): Promise<GenerateActionResult> {
   try {
-    // Sync this repo's commits first — non-fatal if it fails.
+    // Sync this repo's commits first — non-fatal if it fails OR times out;
+    // we proceed with whatever commits are already cached in the DB.
+    const tSync = Date.now();
     try {
-      const syncResult = await syncOneRepo(repo);
+      const syncResult = await withTimeout(
+        syncOneRepo(repo),
+        SYNC_TIMEOUT_MS,
+        `sync timed out for ${repo}`,
+      );
       if (!syncResult.ok) {
         console.warn(`[generateForRepoAction] Sync failed for ${repo}:`, syncResult.error);
       }
     } catch (syncErr) {
-      console.warn(`[generateForRepoAction] Sync threw for ${repo}:`, syncErr);
+      console.warn(`[generateForRepoAction] Sync failed/timed out for ${repo}:`, syncErr);
+    } finally {
+      console.log(`[generate ${repo}] sync ${Date.now() - tSync}ms`);
     }
 
-    const result = await generateDrafts({ repoFilter: repo });
+    // Generation IS fatal to this repo — but bounded, so a stall rejects with
+    // a clear message rather than hanging. The client marks this repo failed
+    // and continues to the next.
+    const result = await withTimeout(
+      generateDrafts({ repoFilter: repo }),
+      GENERATE_TIMEOUT_MS,
+      `generation timed out for ${repo}`,
+    );
     await setLastRunAt(new Date().toISOString());
     revalidatePath("/");
     return { ok: true, result };

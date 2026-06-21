@@ -55,6 +55,11 @@ import { DRAFT_SYSTEM_PROMPT } from "@/prompts/draft-system";
 
 const MODEL = "claude-sonnet-4-6";
 
+// Per-call ceiling on every Anthropic request. Without this the SDK waits up
+// to its 600s default, so a stalled connection can hang a whole generation.
+// 60s is comfortably above a healthy call (~10-15s) but fails fast on a stall.
+const ANTHROPIC_TIMEOUT_MS = 60_000;
+
 const IDENTIFY_TOOL_NAME = "submit_moments";
 const DRAFT_MOMENT_TOOL_NAME = "submit_moment_drafts";
 const REDDIT_DRAFT_TOOL_NAME = "submit_reddit_draft";
@@ -258,6 +263,7 @@ export async function generateDrafts(
   const client = new Anthropic({
     apiKey: key,
     maxRetries: 0, // app-layer handles retries if/when needed
+    timeout: ANTHROPIC_TIMEOUT_MS, // fail fast on a stalled call
   });
 
   const context: SharedContext = {
@@ -269,12 +275,20 @@ export async function generateDrafts(
     notes,
   };
 
+  // Stage timing keyed by repo, so a future hang shows WHERE it stalled
+  // (identify vs draft) in the server logs.
+  const repoLabel = repoFilter ?? "all";
+
   // ── Phase 1: identify moments ─────────────────────────────────────────
+  const t0Identify = Date.now();
   const identifyResult = await identifyMoments(context, {
     windowDays,
     maxMoments,
     repoFilter,
   });
+  console.log(
+    `[generate ${repoLabel}] identifyMoments ${Date.now() - t0Identify}ms → ${identifyResult.moments.length} moment(s)`,
+  );
 
   const generationId = randomUUID();
 
@@ -301,8 +315,12 @@ export async function generateDrafts(
   // starts (504 from Vercel). Reverted — pure parallel is the known-good
   // shape for Hobby compatibility. Cost penalty is ~$0.05/fire (~$5/year
   // at twice-weekly cadence), accepted as the price of fitting in 60s.
+  const t0Draft = Date.now();
   const draftResults = await Promise.all(
     identifyResult.moments.map((moment) => draftMoment(moment, context)),
+  );
+  console.log(
+    `[generate ${repoLabel}] draftMoment ×${identifyResult.moments.length} ${Date.now() - t0Draft}ms`,
   );
 
   // ── Persist ────────────────────────────────────────────────────────────
@@ -617,7 +635,11 @@ export async function generateRedditDrafts(args: {
     await Promise.all(noteIds.map((id) => getNoteById(Number(id))))
   ).filter((n): n is NoteRow => n !== null);
 
-  const client = new Anthropic({ apiKey: key, maxRetries: 0 });
+  const client = new Anthropic({
+    apiKey: key,
+    maxRetries: 0,
+    timeout: ANTHROPIC_TIMEOUT_MS, // fail fast on a stalled call
+  });
   const ctx: RedditDraftContext = {
     client,
     userBannedWords,

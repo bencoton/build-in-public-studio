@@ -103,7 +103,7 @@ export async function generateWebsiteSummary(
       "Produce a structured website summary for this product. Call submit_website_summary with: tagline (one line, <80 chars), intro (2-3 short paragraphs, 80-200 words), features (3-6 specific feature statements). Concrete over generic. Match the voice rules in the system prompt.",
   });
 
-  const client = new Anthropic({ apiKey: key, maxRetries: 0 });
+  const client = new Anthropic({ apiKey: key, maxRetries: 0, timeout: 60_000 });
 
   const response = await client.messages.create({
     model: MODEL,
@@ -225,7 +225,7 @@ export async function generateLaunchAnnouncement(
       "Draft the launch announcement for this product. Call submit_launch_announcement with both variants: an X thread (numbered tweets, 5-9 of them, each <280 chars) and an Indie Hackers long-form post (400-800 words, conversational first-person). Strong hook, concrete specifics from the project's actual work, single clear call to action. Use [LINK] as a placeholder for the URL.",
   });
 
-  const client = new Anthropic({ apiKey: key, maxRetries: 0 });
+  const client = new Anthropic({ apiKey: key, maxRetries: 0, timeout: 60_000 });
 
   const response = await client.messages.create({
     model: MODEL,

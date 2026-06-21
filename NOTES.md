@@ -4,6 +4,16 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-06-21 — Timeout guards on per-repo generate (no more infinite hang)
+
+- **Bug:** `generateForRepoAction` called `syncOneRepo` + `generateDrafts` with **no timeout**, unlike `generateAllDraftsAction` (which races its sync against 10s). A stalled GitHub or Anthropic call could hang the per-repo server action forever; the client loop `await`ed it, so the spinner ticked indefinitely and the per-repo queue stalled on the bad repo. Confirmed on the real checkout before fixing.
+- **Fix (no new dependency):**
+  - `generateForRepoAction`: added a `withTimeout` helper (races a promise against a timer it always clears). Sync is raced against **10s** (non-fatal → fall back to cached commits); generation is raced against **90s**, rejecting with a clear `generation timed out for <repo>`.
+  - **Every Anthropic client** now sets `timeout: 60_000` — `claude.ts` (main + reddit), `claude-regenerate.ts`, and both clients in `claude-summaries.ts` — so a stalled connection fails fast instead of sitting toward the SDK's 600s default. `maxRetries: 0` kept.
+  - **Stage timing logs keyed by repo:** sync (in the action), `identifyMoments` + `draftMoment` (in `generateDrafts`) — so a future hang shows WHERE it stalls in the server logs.
+  - `generate-now-button.tsx`: a client-side **120s** ceiling per repo (above the server worst case) as a belt-and-suspenders net; a failed/timed-out repo is marked failed and the loop **continues to the next** (it already didn't break, since the action returns `{ok:false}` rather than throwing).
+- **Verification:** `npx tsc --noEmit` + `npm run lint` both clean (same 6 pre-existing react-hooks warnings).
+
 ## 2026-06-21 — Suspected BIPS-L8 NUL corruption: investigated, none found
 
 - Opened this session to recover from a suspected BIPS-L8 recurrence (NUL-byte corruption of source files + clobbered lesson docs). **Per the Bug Diagnosis Loop, verified before touching anything — and the premise did not hold in this working tree.**

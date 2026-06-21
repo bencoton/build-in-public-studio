@@ -26,6 +26,24 @@ interface Props {
   repos: string[];
 }
 
+// Client-side ceiling per repo — a safety net above the server action's own
+// timeouts (~10s sync + 90s generate + overhead). Only fires if the server
+// transport itself stalls; on fire we mark the repo failed and move on so the
+// spinner can never tick forever.
+const CLIENT_CEILING_MS = 120_000;
+
+function withClientTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 export function GenerateNowButton({ repos }: Props) {
   const [running, setRunning] = useState(false);
   const [statuses, setStatuses] = useState<Record<string, RepoStatus>>({});
@@ -55,9 +73,24 @@ export function GenerateNowButton({ repos }: Props) {
     setRunning(true);
 
     // Run sequentially — sequential is safer under 60s-per-call Hobby limits.
+    // A single repo that errors or times out must NOT block the queue: each
+    // call is wrapped so any failure becomes a "done" status and the loop
+    // continues to the next repo.
     for (const repo of repos) {
       setStatuses((prev) => ({ ...prev, [repo]: { state: "running" } }));
-      const result = await generateForRepoAction(repo);
+      let result: GenerateActionResult;
+      try {
+        result = await withClientTimeout(
+          generateForRepoAction(repo),
+          CLIENT_CEILING_MS,
+          `${repo} timed out — the server didn't respond. Moving on.`,
+        );
+      } catch (err) {
+        result = {
+          ok: false,
+          error: err instanceof Error ? err.message : "Timed out.",
+        };
+      }
       setStatuses((prev) => ({ ...prev, [repo]: { state: "done", result } }));
     }
 

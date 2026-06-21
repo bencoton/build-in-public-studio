@@ -142,6 +142,7 @@ export async function regenerateDraft(draftId: number): Promise<RegenerateResult
   const client = new Anthropic({
     apiKey: key,
     maxRetries: 0,
+    timeout: 60_000, // per-call ceiling — fail fast on a stalled call
   });
 
   const response = await client.messages.create({
