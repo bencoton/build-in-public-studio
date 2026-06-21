@@ -15,10 +15,7 @@ export function GenerateButton() {
   // long wait (60-90s isn't unusual for Sonnet with 4k tokens of output)
   // feels like progress rather than a frozen UI.
   useEffect(() => {
-    if (!pending) {
-      setElapsed(0);
-      return;
-    }
+    if (!pending) return;
     const startedAt = Date.now();
     const id = setInterval(() => {
       setElapsed(Math.floor((Date.now() - startedAt) / 1000));
@@ -28,6 +25,7 @@ export function GenerateButton() {
 
   const handleGenerate = () => {
     setResult(null);
+    setElapsed(0);
     startTransition(async () => {
       const r = await generateDraftsAction();
       setResult(r);

@@ -13,13 +13,18 @@ import { useTheme } from "next-themes";
 
 import { Button } from "@/components/ui/button";
 
+// Hydration detection without set-state-in-effect: the server snapshot is
+// false, the client snapshot is true, so `mounted` flips on hydration with no
+// effect and no cascading render (react-hooks/set-state-in-effect).
+const subscribe = () => () => {};
+
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = React.useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false,
+  );
 
   if (!mounted) {
     // Placeholder keeps the header layout from jumping. Disabled until hydrated.

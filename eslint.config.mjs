@@ -14,15 +14,14 @@ const eslintConfig = [
   ...coreWebVitals,
   ...typescript,
   {
-    // `react-hooks` 7 (pulled in by the Next 16 upgrade) added two rules that
-    // fire on components written before they existed — the standard next-themes
-    // mount-guard (`setState` in a mount effect), elapsed-timer resets, and a
-    // `Date.now()` freshness check in render. None are in the Reddit work; they
-    // predate the rules. Downgraded to warnings so they stay visible without
-    // blocking, pending a dedicated cleanup pass (see NOTES 2026-06-20).
+    // `react-hooks` 7 (Next 16 upgrade) added these two rules. The pre-existing
+    // violations they surfaced were fixed on 2026-06-21 (next-themes mount guard
+    // → useSyncExternalStore; elapsed-timer resets moved out of the effect;
+    // `Date.now()` reads moved into plain helpers), so they're enforced at
+    // `error` again — keep them red so the patterns don't creep back.
     rules: {
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/purity": "warn",
+      "react-hooks/set-state-in-effect": "error",
+      "react-hooks/purity": "error",
     },
   },
 ];

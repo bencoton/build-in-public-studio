@@ -2,10 +2,11 @@
 
 ## Open
 
-- **2026-06-20** — 6 `eslint-plugin-react-hooks` v7 warnings remain after the ESLint flat-config migration (Phase 1.5c). The two new v7 rules (`set-state-in-effect`, purity) were downgraded from error to warning to unblock the `npm run lint` gate; none are in the Reddit code. Locations: `theme-toggle.tsx`, `app-header.tsx` (next-themes mount guard / timer resets), `generate-now-button.tsx`, `batch-form.tsx`, `generate-button.tsx` (a `Date.now()` in render). **Polish task:** a dedicated pass to fix the underlying patterns (memoise/lift the `Date.now()` call, guard the effect set-states) and promote the two rules back to error. Tech debt only — no user-facing impact.
+*(nothing right now)*
 
 ## Resolved
 
+- **2026-06-21** — The 6 `eslint-plugin-react-hooks` v7 warnings are fixed at the source (next-themes mount guard → `useSyncExternalStore`; elapsed-timer resets moved out of the effect into the handler; `Date.now()` reads moved into plain helpers / a server-computed prop) and both rules (`set-state-in-effect`, purity) are back at `error`. `npm run lint` + `tsc` + `npm run build` all clean. Behaviour unchanged.
 - **2026-05-25** — Same class of bug for `node-cron`. Despite marking it in `experimental.serverComponentsExternalPackages`, webpack still tried to bundle node-cron's `background-scheduled-task` worker chain and failed on `require('path')`. Resolved by dropping `node-cron` and rolling the scheduler ourselves with `setTimeout` + `cron-parser` (which we already had as a dep for the header). Updated BIPS-L5 with the empirical finding that `serverComponentsExternalPackages` doesn't reliably help the instrumentation bundle pass.
 - **2026-05-25** — Stage 9 dev server 500-ing on every route after adding `node-notifier`. Webpack couldn't resolve the package's transitive Node built-ins (`fs`, `net`) imported via `is-wsl`, `is-docker`, `growly`. Resolved by dropping `node-notifier` entirely and replacing desktop toasts with dev-terminal logging plus the existing "Last run" header indicator. See lesson BIPS-L5 in `CLAUDE.md`.
 - **2026-05-25** — `Only plain objects ... can be passed to Client Components` runtime error on the dashboard. Caused by `node:sqlite` returning null-prototype row objects which Next.js's RSC serializer rejects when passed as Client Component props. Resolved by spreading each row (`{...row}`) inside `getLatestGeneration` and `getAllDrafts`. See lesson BIPS-L4 in `CLAUDE.md`.

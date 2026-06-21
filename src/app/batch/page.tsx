@@ -8,8 +8,21 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getWatchedRepos } from "@/lib/settings";
+import { toLocalDateString } from "@/lib/scheduling";
 
 import { BatchForm } from "./batch-form";
+
+// Default batch start date: the next upcoming Monday in UK local time. A plain
+// helper (not the component) so the `new Date()` read isn't a render impurity;
+// computed per request (the page is force-dynamic) and passed into the form so
+// server and client render identical initial markup.
+function nextMonday(): string {
+  const d = new Date();
+  const dayOfWeek = d.getUTCDay(); // 0=Sun … 6=Sat
+  const daysUntil = ((1 - dayOfWeek + 7) % 7) || 7; // always ≥ 1
+  d.setUTCDate(d.getUTCDate() + daysUntil);
+  return toLocalDateString(d);
+}
 
 // Server-action-driven Claude generation. Two-phase pipeline in
 // src/lib/claude.ts (identify + parallel drafts) keeps wall-clock under
@@ -47,7 +60,10 @@ export default async function BatchPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <BatchForm watchedRepos={watchedRepos} />
+          <BatchForm
+            watchedRepos={watchedRepos}
+            defaultStartDate={nextMonday()}
+          />
         </CardContent>
       </Card>
     </div>

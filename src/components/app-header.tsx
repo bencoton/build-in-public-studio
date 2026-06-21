@@ -21,11 +21,9 @@ export async function AppHeader() {
   // "Missed run" — last run was over 8 days ago AND the schedule is weekly.
   // Common cause: the deployment was paused, the cron secret was rotated
   // without Vercel being updated, or the user manually disabled the cron in
-  // the Vercel dashboard.
-  const lastRunDate = lastRunAt ? new Date(lastRunAt) : null;
-  const isMissed =
-    lastRunDate !== null &&
-    Date.now() - lastRunDate.getTime() > 8 * 24 * 60 * 60 * 1000;
+  // the Vercel dashboard. (Computed in a helper so the `Date.now()` impurity
+  // stays out of the component body — react-hooks/purity.)
+  const isMissed = isRunMissed(lastRunAt);
 
   return (
     <header className="border-b px-8 py-4 flex items-center justify-between gap-4">
@@ -66,6 +64,13 @@ export async function AppHeader() {
       </div>
     </header>
   );
+}
+
+/** True when the last run was over 8 days ago (a weekly cadence missed a beat).
+ *  A plain helper so the `Date.now()` read isn't an impurity in the component. */
+function isRunMissed(lastRunAt: string | null): boolean {
+  if (!lastRunAt) return false;
+  return Date.now() - new Date(lastRunAt).getTime() > 8 * 24 * 60 * 60 * 1000;
 }
 
 /** Compute the next firing time from the cron expression, or null on parse error. */

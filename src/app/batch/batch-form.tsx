@@ -14,44 +14,29 @@ import {
   batchGenerateAction,
   type BatchGenerateActionResult,
 } from "./actions";
-import { toLocalDateString } from "@/lib/scheduling";
 
 type Props = {
   watchedRepos: string[];
+  /** Default start date (next Monday, UK local), computed server-side and
+   *  passed in so the initial markup matches on both sides — no after-mount
+   *  state init, no hydration mismatch. */
+  defaultStartDate: string;
 };
 
-// Default start date: the next upcoming Monday in UK local time.
-function nextMonday(): string {
-  const d = new Date();
-  // 0=Sun, 1=Mon, ..., 6=Sat. Days until next Mon (always ≥ 1):
-  const dayOfWeek = d.getUTCDay();
-  const daysUntil = ((1 - dayOfWeek + 7) % 7) || 7;
-  d.setUTCDate(d.getUTCDate() + daysUntil);
-  return toLocalDateString(d);
-}
-
-export function BatchForm({ watchedRepos }: Props) {
+export function BatchForm({ watchedRepos, defaultStartDate }: Props) {
   const [windowDays, setWindowDays] = useState(60);
   const [maxMoments, setMaxMoments] = useState(10);
-  const [startDate, setStartDate] = useState<string>("");
+  const [startDate, setStartDate] = useState<string>(defaultStartDate);
   const [repoFilter, setRepoFilter] = useState<string>("all");
   const [result, setResult] = useState<BatchGenerateActionResult | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [pending, startTransition] = useTransition();
 
-  // Set the default start date after hydration so server and client agree on
-  // initial markup. Date math on the server would render today; on the client
-  // it would render the next Monday, causing a mismatch warning.
+  // Elapsed-seconds counter while the action runs. The interval's setState is
+  // a timer callback (allowed); the counter is reset to 0 in the handler when
+  // a run starts, so there's no synchronous setState in the effect.
   useEffect(() => {
-    if (!startDate) setStartDate(nextMonday());
-  }, [startDate]);
-
-  // Elapsed-seconds counter while the action runs.
-  useEffect(() => {
-    if (!pending) {
-      setElapsed(0);
-      return;
-    }
+    if (!pending) return;
     const startedAt = Date.now();
     const id = setInterval(() => {
       setElapsed(Math.floor((Date.now() - startedAt) / 1000));
@@ -61,6 +46,7 @@ export function BatchForm({ watchedRepos }: Props) {
 
   const handleGenerate = () => {
     setResult(null);
+    setElapsed(0);
     startTransition(async () => {
       const r = await batchGenerateAction({
         windowDays,

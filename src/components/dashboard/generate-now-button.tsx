@@ -57,12 +57,11 @@ export function GenerateNowButton({ repos }: Props) {
   const [statuses, setStatuses] = useState<Record<string, RepoStatus>>({});
   const [elapsed, setElapsed] = useState(0);
 
-  // Elapsed-seconds counter while any repo is running.
+  // Elapsed-seconds counter while any repo is running. The interval's setState
+  // runs in a timer callback (allowed); the counter is reset to 0 in the
+  // handler when a run starts, so there's no synchronous setState in the effect.
   useEffect(() => {
-    if (!running) {
-      setElapsed(0);
-      return;
-    }
+    if (!running) return;
     const startedAt = Date.now();
     const id = setInterval(
       () => setElapsed(Math.floor((Date.now() - startedAt) / 1000)),
@@ -74,6 +73,7 @@ export function GenerateNowButton({ repos }: Props) {
   const handleGenerate = async () => {
     if (repos.length === 0) return;
 
+    setElapsed(0);
     // Initialise all repos to "pending".
     const initial: Record<string, RepoStatus> = {};
     for (const r of repos) initial[r] = { state: "pending" };

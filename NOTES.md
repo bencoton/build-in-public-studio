@@ -4,6 +4,17 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-06-21 — Cleared the 6 react-hooks v7 warnings (lint-correctness pass)
+
+- Fixed the underlying patterns (no suppression) and promoted both rules (`react-hooks/set-state-in-effect`, `react-hooks/purity`) back to **`error`** in `eslint.config.mjs`. `.eslintrc.json` was already gone (nothing to delete).
+- **`theme-toggle.tsx`** — the next-themes hydration mount guard moved from `useState(false)` + `useEffect(() => setMounted(true))` to **`useSyncExternalStore`** (server snapshot `false`, client `true`): same hydration behaviour, no set-state-in-effect, no dep.
+- **`generate-now-button.tsx`, `generate-button.tsx`, `batch-form.tsx`** — the elapsed-timer effects dropped their synchronous `setElapsed(0)` (the flagged line); the reset moved into the click handler. `elapsed` only renders while running, so behaviour is identical. The interval's setState (a timer callback) was never the problem.
+- **`batch-form.tsx`** — the after-mount default-start-date `useEffect` (set-state-in-effect, there to dodge a hydration mismatch) is gone: the next-Monday default is now computed **server-side** in `batch/page.tsx` and passed as a `defaultStartDate` prop, so the form initialises state directly and server/client markup match.
+- **`app-header.tsx`** — the `Date.now()` "missed run" check (a server-component render impurity) moved into a plain `isRunMissed()` helper; the same `new Date()`-in-render concern for the batch default-date was handled by computing it in a plain `nextMonday()` helper, not the component body.
+- **Note on the task's framing:** the actual purity (`Date.now()` in render) warning was in `app-header.tsx`, not the generate buttons (those were all set-state-in-effect). Fixed each at its real site.
+- **Mapping note:** the next-themes guard now needs **no** mount effect at all — `useSyncExternalStore` is the idiomatic React 18 hydration-detection primitive.
+- **Verified:** `npm run lint` (rules at error) → 0 problems; `npx tsc --noEmit` → clean; `npm run build` → succeeds. Behaviour unchanged. No new dependency.
+
 ## 2026-06-21 — Fix: coerce moments.source_ref jsonb to array on read (restores source context)
 
 - Sibling fix to BIPS-L7. The probe from the previous commit confirmed `moments.source_ref` (jsonb) comes back from postgres.js as a **string**; its `Array.isArray`-only guard silently yielded `[]`, so `source_refs` was empty on **every DB read** — blank SHA badges on moment cards, degraded regenerate context, and on-demand Reddit drafts missing their commit/note context.
