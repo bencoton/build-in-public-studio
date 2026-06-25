@@ -20,6 +20,9 @@
 .DS_Store
 *.pem
 
+# Office temp/lock files (e.g. opening a .md in Word creates ~$… lockfiles)
+~$*
+
 # debug
 npm-debug.log*
 yarn-debug.log*

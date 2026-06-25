@@ -4,6 +4,21 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-06-25 — Humanizer Phase 1 (P0): `humanize()` module + tell scanner
+
+Implemented Phase 1 of `docs/SPEC-humanizer.md` — P0 only (standalone module + deterministic scanner + verification). **No UI** (that's Phase 2). No new dependency.
+
+- **`src/lib/tell-scanner.ts`** — pure regex/heuristic scanner, **zero imports** (copy-importable into any app). Counts the 10 Appendix A tell categories (em-dash overuse, metronomic rhythm, wrap-up/conclusion, listicle/triad, sycophantic openers, missing contractions, "not just X, it's Y", inflated importance, hollow profundity, banned diction). `scanTells(text, { bannedWords })` → `{ total, byCategory }`. Exports `CATALOG_BANNED_WORDS` as the single source of truth for the diction list. The metronomic-rhythm check is a coefficient-of-variation heuristic over sentence word-counts (needs ≥5 sentences, mean ≥6 words). Reproducible for identical input.
+- **`src/lib/humanize.ts`** — the contract from the spec verbatim (`HumanizeOptions` / `HumanizeResult` / `humanize(text, opts)`). **Imports nothing from domain code** — only the sibling scanner + the Anthropic SDK. Caller supplies `apiKey`, `voiceExamples` (raw strings), `bannedWords`, `styleNotes` (no env coupling). Default `passes = ["tells"]` + `audit` on; voice pass runs **only** when `passes` includes `"voice"`. Pass order: **voice (adds) → tells (removes) → audit (residue)**. SDK used exactly like `claude.ts`: `claude-sonnet-4-6`, `maxRetries: 0`, 60s client timeout, forced `tool_use` (`submit_rewrite` → `{ text, changes }`), honours `opts.signal` via per-call request options. **No prompt caching in v1.** The evidence-ranked Appendix A catalog is baked into the Tells-pass system prompt; `opts.bannedWords` merged with the catalog list. Every pass prompt explicitly preserves meaning, numbers, links, @handles, and `[VERIFY]` markers. Returns token usage in the app's `{ inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens }` shape.
+- **Light format guardrails** (`format: x_thread | ih_long | reddit | plain`) steer in-prompt only (P0); hard enforcement (≤280 chars etc.) is P1.
+
+**Verification (Appendix B):**
+- *Scanner (done, deterministic, no key/cost):* ran the real `tell-scanner.ts` via `node --experimental-strip-types` over X/IH/Reddit samples — slop drafts scored 14 and 20 tells across the catalog; a clean human draft scored **0** with its `[VERIFY]` preserved; all scans reproducible.
+- *Gates (done):* `npx tsc --noEmit` clean; `eslint` clean on both new files. (Run the official `npm run build` + `npm run lint` before committing.)
+- *`humanize()` live run (deferred to Ben — needs the API key + costs money):* harness at **`scripts/humanize-verify.mjs`** (untracked; `git add` to keep or delete it). Run from the project root: `node --experimental-strip-types --env-file=.env.local scripts/humanize-verify.mjs`. It checks `tellsAfter < tellsBefore` and that no `[VERIFY]`/numbers were dropped on a starter test set; expand toward the 20-draft set and log the result here.
+
+**Not done (by scope):** Phase 2 on-demand UI trigger (the seam is between generate and persist — `draftMoment` / `draftRedditForSub` / `regenerateDraft`). Open spec questions still standing: v1 default passes (assumed tells-only), prompt-cache (skipped), UI trigger location, dep check (zero new deps — confirmed).
+
 ## 2026-06-21 — Cleared the 6 react-hooks v7 warnings (lint-correctness pass)
 
 - Fixed the underlying patterns (no suppression) and promoted both rules (`react-hooks/set-state-in-effect`, `react-hooks/purity`) back to **`error`** in `eslint.config.mjs`. `.eslintrc.json` was already gone (nothing to delete).
