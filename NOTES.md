@@ -4,6 +4,19 @@ Append-only. Newest entry at the top.
 
 ---
 
+## 2026-06-25 — Humanizer Phase 2 (P0): on-demand "Humanize" trigger
+
+Wired the Phase 1 `humanize()` module into the UI as a per-variant draft action. Decisions (per the task): **per-variant card**, **tells-only default** (audit on, voice pass NOT forced), **reuse the `regenerateDraft` plumbing**. No new dependency, no prompt caching.
+
+- **`src/lib/claude-humanize.ts`** (new) — `humanizeDraft(draftId)`, a near-twin of `claude-regenerate.ts`. Loads the draft via `getDraftWithMoment`, gathers the same voice signals (`getBannedWords`, `getStyleNotes`, `getStarredExamples(10, draft.variant)`), maps the starred `HistoryDraft[]` → raw `string[]` for `humanize()`, maps `variant → format` (`x_thread`/`ih_long`/`reddit`), calls `humanize(draft.content, { … })` at **default passes** (tells + audit), then persists with **`updateDraftContent` — content only**, so status/lifecycle is untouched and revert/restore keeps working. Returns the full `HumanizeResult` (tellsBefore/After, changes, usage).
+- **Total wall-clock bound:** `humanize()` already caps each Anthropic call at 60s, but two sequential calls (tells + audit) could in theory drift past the serverless cap, so `humanizeDraft` wraps the run in an `AbortController` (55s) and passes `signal` through — uses the contract's `opts.signal`, aborts whichever call is in flight.
+- **`src/app/dashboard-actions.ts`** — added `humanizeDraftAction(draftId)` + `HumanizeActionResult`, mirroring `regenerateDraftAction` (try/catch → `revalidatePath("/")`).
+- **`src/components/dashboard/moment-card.tsx`** — added a **Humanize** button (Wand2 icon) in `DraftVariant` next to Regenerate, gated identically (`!isRejected && !isPosted`, so draft + approved, and it appears on reddit bodies too since they reuse `DraftVariant`). On success shows a tiny `"N tells removed"` hint (`max(0, tellsBefore − tellsAfter)`; "already clean" when 0). Full before/after diff is **P1 — not built**. Dims content while running; disables alongside regen/status; clears the stale hint on regenerate/edit. Revert path untouched.
+
+**Verification:** `npx tsc --noEmit` clean; `eslint` clean on all three changed files. (Run the official `npm run build` + `npm run lint` before committing.) **Live click-through deferred to Ben** (real Claude calls on his key) — humanize a draft from the dashboard, confirm the "N tells removed" hint, the content updates in place, `[VERIFY]`/numbers survive, and approve→revert still works.
+
+**Out of scope (kept for later):** P1 before/after diff view, per-format hard guardrails (≤280 chars), settings toggle for passes; P2 cron-path auto-humanize.
+
 ## 2026-06-25 — Humanizer Phase 1 (P0): `humanize()` module + tell scanner
 
 Implemented Phase 1 of `docs/SPEC-humanizer.md` — P0 only (standalone module + deterministic scanner + verification). **No UI** (that's Phase 2). No new dependency.

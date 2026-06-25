@@ -10,6 +10,8 @@ import {
 } from "@/lib/draft-mutations";
 import { fromLocalDateString } from "@/lib/scheduling";
 import { regenerateDraft, type RegenerateResult } from "@/lib/claude-regenerate";
+import { humanizeDraft } from "@/lib/claude-humanize";
+import type { HumanizeResult } from "@/lib/humanize";
 import {
   generateDrafts,
   generateRedditDrafts,
@@ -30,6 +32,10 @@ export type SimpleActionResult =
 
 export type RegenerateActionResult =
   | { ok: true; result: RegenerateResult }
+  | { ok: false; error: string };
+
+export type HumanizeActionResult =
+  | { ok: true; result: HumanizeResult }
   | { ok: false; error: string };
 
 export type GenerateActionResult =
@@ -63,6 +69,26 @@ export async function regenerateDraftAction(
 ): Promise<RegenerateActionResult> {
   try {
     const result = await regenerateDraft(draftId);
+    revalidatePath("/");
+    return { ok: true, result };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    return { ok: false, error: message };
+  }
+}
+
+// ── Humanize a single draft (on-demand de-slop pass) ─────────────────────
+//
+// Mirrors regenerateDraftAction: runs the standalone humanize() module over the
+// draft's current content (tells-only default + audit), persists content only.
+// Returns tellsBefore/tellsAfter/changes + token usage so the card can show a
+// tiny "N tells removed" hint.
+
+export async function humanizeDraftAction(
+  draftId: number,
+): Promise<HumanizeActionResult> {
+  try {
+    const result = await humanizeDraft(draftId);
     revalidatePath("/");
     return { ok: true, result };
   } catch (err) {

@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Copy,
   Sparkles,
+  Wand2,
   ClipboardList,
 } from "lucide-react";
 
@@ -29,6 +30,7 @@ import { cn } from "@/lib/utils";
 import {
   saveDraftEditAction,
   regenerateDraftAction,
+  humanizeDraftAction,
   setDraftStatusAction,
   generateRedditDraftsAction,
 } from "@/app/dashboard-actions";
@@ -378,6 +380,10 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
   const [regenError, setRegenError] = useState<string | null>(null);
   const [regenPending, startRegenTransition] = useTransition();
 
+  const [humanizeError, setHumanizeError] = useState<string | null>(null);
+  const [humanizeHint, setHumanizeHint] = useState<string | null>(null);
+  const [humanizePending, startHumanizeTransition] = useTransition();
+
   const [statusError, setStatusError] = useState<string | null>(null);
   const [statusPending, startStatusTransition] = useTransition();
 
@@ -387,6 +393,7 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
 
   const handleSaveEdit = () => {
     setEditError(null);
+    setHumanizeHint(null); // stale once the content is hand-edited
     startEditTransition(async () => {
       const r = await saveDraftEditAction(draft.id, editValue);
       if (!r.ok) {
@@ -405,12 +412,35 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
 
   const handleRegenerate = () => {
     setRegenError(null);
+    setHumanizeHint(null); // stale once the content is replaced
     if (isEditing) handleCancelEdit();
     startRegenTransition(async () => {
       const r = await regenerateDraftAction(draft.id);
       if (!r.ok) setRegenError(r.error);
       // On success, revalidatePath in the action triggers a server re-render
       // and the new content arrives as a fresh draft.content prop.
+    });
+  };
+
+  const handleHumanize = () => {
+    setHumanizeError(null);
+    setHumanizeHint(null);
+    if (isEditing) handleCancelEdit();
+    startHumanizeTransition(async () => {
+      const r = await humanizeDraftAction(draft.id);
+      if (!r.ok) {
+        setHumanizeError(r.error);
+      } else {
+        // Tiny result hint only — full before/after diff is P1.
+        const removed = Math.max(0, r.result.tellsBefore - r.result.tellsAfter);
+        setHumanizeHint(
+          removed > 0
+            ? `${removed} tell${removed === 1 ? "" : "s"} removed`
+            : "already clean — no tells found",
+        );
+      }
+      // On success, revalidatePath re-renders and the new content arrives as a
+      // fresh draft.content prop (same as regenerate).
     });
   };
 
@@ -471,7 +501,7 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
           className={cn(
             "rounded-md border bg-card/50 p-4 text-sm whitespace-pre-wrap leading-relaxed font-sans",
             muted && "text-muted-foreground opacity-60",
-            regenPending && "opacity-50",
+            (regenPending || humanizePending) && "opacity-50",
           )}
         >
           {draft.content}
@@ -515,7 +545,7 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
                   size="sm"
                   variant="outline"
                   onClick={() => setIsEditing(true)}
-                  disabled={regenPending || statusPending}
+                  disabled={regenPending || humanizePending || statusPending}
                 >
                   <Pencil className="size-3.5" />
                   Edit
@@ -525,7 +555,7 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
                   size="sm"
                   variant="outline"
                   onClick={handleRegenerate}
-                  disabled={regenPending || statusPending}
+                  disabled={regenPending || humanizePending || statusPending}
                 >
                   {regenPending ? (
                     <Loader2 className="size-3.5 animate-spin" />
@@ -533,6 +563,21 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
                     <RefreshCw className="size-3.5" />
                   )}
                   {regenPending ? "Regenerating..." : "Regenerate"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleHumanize}
+                  disabled={regenPending || humanizePending || statusPending}
+                  title="Strip AI tells (em-dashes, stiff phrasing, hype) while keeping your facts and voice"
+                >
+                  {humanizePending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Wand2 className="size-3.5" />
+                  )}
+                  {humanizePending ? "Humanizing..." : "Humanize"}
                 </Button>
               </>
             )}
@@ -544,7 +589,7 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
                   type="button"
                   size="sm"
                   onClick={() => handleSetStatus("approved")}
-                  disabled={statusPending || regenPending}
+                  disabled={statusPending || regenPending || humanizePending}
                 >
                   <Check className="size-3.5" />
                   Approve
@@ -554,7 +599,7 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
                   size="sm"
                   variant="ghost"
                   onClick={() => handleSetStatus("rejected")}
-                  disabled={statusPending || regenPending}
+                  disabled={statusPending || regenPending || humanizePending}
                   className="text-muted-foreground hover:text-destructive"
                 >
                   <X className="size-3.5" />
@@ -605,6 +650,18 @@ function DraftVariant({ draft }: { draft: DraftRow }) {
         <p className="text-sm text-destructive flex items-center gap-1.5">
           <AlertCircle className="size-4" />
           {regenError}
+        </p>
+      )}
+      {humanizeHint && !humanizeError && (
+        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+          <Wand2 className="size-3.5 text-wyco-teal" />
+          {humanizeHint}
+        </p>
+      )}
+      {humanizeError && (
+        <p className="text-sm text-destructive flex items-center gap-1.5">
+          <AlertCircle className="size-4" />
+          {humanizeError}
         </p>
       )}
       {statusError && (
