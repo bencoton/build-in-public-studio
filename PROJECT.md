@@ -5,9 +5,8 @@ tagline: Turn your week's commits and notes into ready-to-ship X threads and IH 
 status: scaffolding
 accent_color: teal
 github: https://github.com/bencoton/build-in-public-studio
-deploy_url: https://build-in-public-studio.vercel.app
 started: 2026-05-24
-last_updated: 2026-06-20
+last_updated: 2026-06-28
 audience: solo devs and indie hackers shipping in public who want a weekly rhythm without writing every post from scratch
 public: true
 # Portfolio Dashboard — auto-read by ../portfolio-dashboard/scripts/build-projects.mjs (run `npm run sync`)
