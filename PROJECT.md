@@ -6,12 +6,13 @@ status: scaffolding
 accent_color: teal
 github: https://github.com/bencoton/build-in-public-studio
 started: 2026-05-24
-last_updated: 2026-06-28
+last_updated: 2026-06-30
 audience: solo devs and indie hackers shipping in public who want a weekly rhythm without writing every post from scratch
 public: true
 # Portfolio Dashboard — auto-read by ../portfolio-dashboard/scripts/build-projects.mjs (run `npm run sync`)
 stage: iteration                # discovery|planning|design|development|testing|deployment|monitoring|iteration
 dashboard_status: active        # active|paused|exploring|backburner|shipped
+env_split: pending              # pending|ready|n/a — separate dev+prod DB & storage (launch gate; see ADR-004 + §8.6)
 summary: "Turns your week's git commits and notes into ready-to-ship build-in-public posts (X threads, Indie Hackers) with Claude — copy-and-post, human stays in the loop."
 wow_alignment: "Aligned — migrated to Neon; Doppler secrets; Vercel Cron drives weekly generation."
 live_url: https://build-in-public-studio.vercel.app
