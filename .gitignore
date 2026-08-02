@@ -57,3 +57,6 @@ migration-backups/
 docs/Ways-of-Working.md
 docs/WYCO-DIGITAL-STYLE-GUIDE.md
 docs/Tech-Stack.md
+
+.vercel
+.env*

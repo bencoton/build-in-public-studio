@@ -23,7 +23,15 @@ if (!url) {
 }
 
 const sql = postgres(url, {
-  ssl: "require",
+  // MUST be "verify-full", never "require". In postgres.js, ssl: "require"
+  // (also "allow"/"prefer") sets rejectUnauthorized: false — no certificate
+  // and no hostname verification at all. "verify-full" is not special-cased,
+  // so it falls through to Node's tls.connect defaults (rejectUnauthorized
+  // true) with servername set, which is the verification we actually want.
+  // Note this explicit option OVERRIDES sslmode= in DATABASE_URL: postgres.js
+  // resolves `k in o ? o[k] : query[k]`, so the option wins. The URL carries
+  // sslmode=verify-full too, and the two must be kept in agreement.
+  ssl: "verify-full",
   max: 5,
   prepare: false,
   types: {
