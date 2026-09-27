@@ -49,7 +49,12 @@ next-env.d.ts
 migration-backups/
 
 # Cowork session config — local-only.
-.claude/
+# Claude Code: local settings and worktrees stay ignored; the shared project
+# hooks (settings.json + hooks/) are committed so every session runs the
+# quality gate.
+/.claude/*
+!/.claude/settings.json
+!/.claude/hooks/
 
 # WyCo-standard reference docs — kept locally for my own reference but not
 # committed to the public repo. Canonical copies live in
