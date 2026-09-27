@@ -185,6 +185,10 @@ if (gitleaks && files === null) {
     const ignore = path.join(projectDir, ".gitleaksignore");
     const args = ["dir", ".", "--no-banner", "--redact", "--exit-code", "0", "-f", "json", "-r", "-", "-l", "error"];
     if (fs.existsSync(ignore)) args.push("-i", ignore);
+    // The scan runs in a temp dir, so gitleaks' own lookup of <target>/.gitleaks.toml
+    // would miss the repo's config (path allowlists etc.); pass it explicitly.
+    const config = path.join(projectDir, ".gitleaks.toml");
+    if (fs.existsSync(config)) args.push("-c", config);
     const leaks = run(gitleaks, args, tmp, Math.max(remaining(), 1_000));
     if (leaks.timedOut) {
       notes.push("gitleaks did not finish in time; run `gitleaks dir .` before committing.");
