@@ -40,6 +40,17 @@ Ben. Beginner-leaning developer. Backend / scripting experience; mobile is newer
 6. **One clear takeaway per post.** Specific over generic ("3 hours debugging one missing await" > "fixed a bug").
 7. **Vercel Cron schedules are UTC-only.** The schedule in `vercel.json` (`0 8 * * 1,4`) is Mon + Thu 08:00 UTC, which is 9am UK during BST and 8am UK during GMT. The DB-stored `schedule_cron` setting (used by `AppHeader` to render "Next run: in X") is timezone-aware via cron-parser, so the countdown shown in the UI stays accurate year-round even though the trigger time drifts by an hour at DST changeover.
 
+## Quality gate (Qlty)
+
+Code quality is checked locally first, then on the PR (WyCo Ways of Working Part 14). Qlty Cloud's free tier **pauses** at 1,000 analysis minutes a month and does not bill overage, so findings get fixed here, before a PR exists. `qlty` is installed at `~/.qlty/bin`; config lives in `.qlty/qlty.toml`.
+
+- **Before every commit:** run `qlty fmt`, then `qlty check`, and fix every finding. With no path argument, both cover only files changed against the upstream branch; `--all` is for baselines, not this loop. `qlty fmt` is a no-op until a formatter plugin is enabled; run it anyway so the habit holds when one is.
+- **Before opening a PR or marking one ready:** run `qlty smells` (changed files by default). Fix complexity or duplication **this branch introduced**. Don't refactor pre-existing smells in the same PR; they get their own.
+- Open PRs as drafts so Qlty posts one clean set of comments when marked ready — but drafts ARE still analysed and cost minutes (verified 2026-09-27). Save minutes by fixing locally first and pushing less often: batch commits, push when a unit of work is done.
+- **After Qlty Cloud reviews a PR** (once this repo is added to Qlty Cloud): read its comments with `gh pr view <n> --comments`. Address every Qlty line comment, by fixing it or replying with the reason, before asking for merge.
+- **Stop hook:** `.claude/settings.json` runs `.claude/hooks/qlty-stop.mjs` when a Claude Code turn ends. It runs `qlty check`, `qlty smells` and a standalone `gitleaks` scan (honouring `.gitleaksignore`) on changed files and hands any findings back so they get fixed before the turn closes. It skips any tool that isn't installed, and gives up after ~25 s rather than block the session.
+- **Secrets:** the `Secrets` workflow runs gitleaks on every PR. A verified false positive goes in `.gitleaksignore` by fingerprint, with a comment saying why; a real secret is removed and rotated, never ignored.
+
 ## Lessons learned (project-specific)
 
 *Append below as you diagnose new bugs.*

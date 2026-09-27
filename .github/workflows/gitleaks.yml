@@ -1,0 +1,38 @@
+name: Secrets
+
+# gitleaks on pull requests only: scans the commits the PR adds. Verified false
+# positives go in .gitleaksignore by fingerprint, with a comment saying why.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: secrets-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    name: Secrets (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Read-only. The action lists the PR's commits via GET /pulls/{n}/commits,
+      # which returns 403 "Resource not accessible by integration" without it.
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No GITLEAKS_LICENSE: only organisation accounts need one, and
+          # bencoton is a personal account (gitleaks-action README).
+          # Comments off: posting them would need pull-requests: write.
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          # Same gitleaks as the local Stop hook, so fingerprints and rules match.
+          GITLEAKS_VERSION: "8.30.1"
