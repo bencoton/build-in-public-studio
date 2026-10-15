@@ -48,7 +48,7 @@ export default function Error({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <pre className="font-mono text-sm bg-muted/50 border border-border rounded-md p-4 whitespace-pre-wrap break-words">
+          <pre className="font-mono text-sm bg-muted/50 border border-border rounded-md p-4 whitespace-pre-wrap wrap-break-word">
             {error.message || "(no message)"}
           </pre>
 

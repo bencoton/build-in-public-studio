@@ -59,7 +59,7 @@ export function BatchForm({ watchedRepos, defaultStartDate }: Props) {
   };
 
   const inputClass =
-    "w-full rounded-md border border-input bg-card px-3 py-2 text-sm font-sans focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+    "w-full rounded-md border border-input bg-card px-3 py-2 text-sm font-sans focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
 
   // For the projected last-date hint, mirror the stagger algorithm at a high
   // level: assume start on Mon → Mon, Thu, Mon... = avg 3.5 days per slot.

@@ -55,7 +55,7 @@ export function ScheduledDateEditor({ draftId, currentScheduledFor }: Props) {
             currentScheduledFor ? toLocalDateString(currentScheduledFor) : ""
           }
           disabled={pending}
-          className="rounded-md border border-input bg-card px-2 py-1 text-xs font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded-md border border-input bg-card px-2 py-1 text-xs font-mono focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         />
         <Button
           type="button"

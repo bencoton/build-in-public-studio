@@ -116,7 +116,7 @@ export function WebsiteSummaryCard({ repo, summary, parsed }: Props) {
 
   if (editing && summary) {
     const inputClass =
-      "w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+      "w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
     return (
       <Card>
         <CardContent className="py-6 space-y-4">
@@ -137,7 +137,7 @@ export function WebsiteSummaryCard({ repo, summary, parsed }: Props) {
               rows={6}
               value={editIntro}
               onChange={(e) => setEditIntro(e.target.value)}
-              className={`${inputClass} resize-y min-h-[8rem]`}
+              className={`${inputClass} resize-y min-h-32`}
             />
           </div>
 
