@@ -57,7 +57,7 @@ export function HistoryFilters({ projects }: Props) {
   };
 
   const selectClass =
-    "rounded-md border border-input bg-card px-2 py-1.5 text-sm font-sans focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+    "rounded-md border border-input bg-card px-2 py-1.5 text-sm font-sans focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
 
   return (
     <div className="flex flex-wrap items-center gap-2">

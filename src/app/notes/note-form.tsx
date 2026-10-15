@@ -45,7 +45,7 @@ export function NoteForm({ repos }: Props) {
         name="content"
         rows={6}
         placeholder="What's worth writing about this week? Markdown supported. Press Ctrl/Cmd+Enter to save."
-        className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm font-sans placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y min-h-[8rem]"
+        className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm font-sans placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring resize-y min-h-32"
         onKeyDown={(e) => {
           // Ctrl/Cmd+Enter submits — handy when the form is the keyboard focus.
           if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
@@ -66,7 +66,7 @@ export function NoteForm({ repos }: Props) {
           id="repo"
           name="repo"
           defaultValue=""
-          className="rounded-md border border-input bg-card px-2 py-1.5 text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded-md border border-input bg-card px-2 py-1.5 text-sm font-mono focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           <option value="">General (unlinked)</option>
           {repos.map((r) => (

@@ -11,23 +11,23 @@ import { ThemeProvider } from "@/components/theme-provider";
 // runtime call to Google Fonts.
 //
 // `variable: "--font-..."` exposes each font as a CSS variable that
-// tailwind.config.ts then references via fontFamily.
+// globals.css maps onto the font-sans / font-heading / font-mono utilities.
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-heading",
+  variable: "--font-space-grotesk",
   display: "swap",
 });
 
 const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-body",
+  variable: "--font-inter",
   display: "swap",
 });
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
-  variable: "--font-mono",
+  variable: "--font-jetbrains-mono",
   display: "swap",
 });
 

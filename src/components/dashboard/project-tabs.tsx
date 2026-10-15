@@ -63,7 +63,7 @@ export function ProjectTabs({ tabs, activeKey }: Props) {
         );
 
         const countBadgeClass = cn(
-          "inline-flex items-center justify-center min-w-[1.25rem] px-1.5 py-0.5 text-xs rounded-full leading-none",
+          "inline-flex items-center justify-center min-w-5 px-1.5 py-0.5 text-xs rounded-full leading-none",
           // Default count badge
           "bg-foreground/10 text-current",
           // Active teal: slightly transparent white on teal

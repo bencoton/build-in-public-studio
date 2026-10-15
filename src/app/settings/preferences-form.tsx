@@ -32,7 +32,7 @@ export function PreferencesForm({
 
   // Field styling shared across the three inputs.
   const inputClass =
-    "w-full rounded-md border border-input bg-card px-3 py-2 text-sm font-sans placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+    "w-full rounded-md border border-input bg-card px-3 py-2 text-sm font-sans placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
 
   return (
     <Card>
@@ -82,7 +82,7 @@ export function PreferencesForm({
               rows={5}
               defaultValue={bannedWords.join("\n")}
               placeholder={"revolutionize\nleverage\nunlock\ndelve"}
-              className={`${inputClass} font-mono resize-y min-h-[6rem]`}
+              className={`${inputClass} font-mono resize-y min-h-24`}
             />
             <p className="text-xs text-muted-foreground">
               One word or phrase per line. Claude is told to avoid these when
@@ -108,7 +108,7 @@ export function PreferencesForm({
               rows={6}
               defaultValue={styleNotes}
               placeholder="Free-form. E.g. 'Beginner-leaning, 100% Claude-generated, lean into specifics over generics, mark uncertain claims with [VERIFY].'"
-              className={`${inputClass} resize-y min-h-[8rem]`}
+              className={`${inputClass} resize-y min-h-32`}
             />
             <p className="text-xs text-muted-foreground">
               Pasted into the system prompt as-is. Anything you want Claude to
