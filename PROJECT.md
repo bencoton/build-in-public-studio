@@ -9,7 +9,6 @@ started: 2026-05-24
 last_updated: 2026-06-30
 audience: solo devs and indie hackers shipping in public who want a weekly rhythm without writing every post from scratch
 public: true
-# Portfolio Dashboard — auto-read by ../portfolio-dashboard/scripts/build-projects.mjs (run `npm run sync`)
 stage: iteration                # discovery|planning|design|development|testing|deployment|monitoring|iteration
 dashboard_status: active        # active|paused|exploring|backburner|shipped
 env_split: pending              # pending|ready|n/a — separate dev+prod DB & storage (launch gate; see ADR-004 + §8.6)
@@ -125,7 +124,7 @@ When this project ships its first user-visible feature, surface that prominently
 
 ## Dashboard (portfolio command deck)
 
-*Auto-read by the WyCo Portfolio Dashboard (`scripts/build-projects.mjs` → `projects.js`). The scalar fields — status, summary, WoW note, **stage**, and service links — live in this file's **frontmatter** (above); the phase roadmap + outstanding tests below are parsed from here. Run `npm run sync` in `portfolio-dashboard` (or let the Sunday sweep refresh it). Never hand-edit the dashboard.*
+*Auto-read by the WyCo Command Deck from the **committed** file (WoW Part 13). The scalar fields live in this file's **frontmatter** (above); the phase roadmap + outstanding tests below are parsed from here.*
 
 - **phases** (exactly one `current`):
   1. [done] Scaffolding — Project + deploy baseline.
