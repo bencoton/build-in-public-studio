@@ -52,15 +52,18 @@ function allow(message) {
   process.exit(0);
 }
 
-function runs(candidate, versionArgs) {
-  const probe = spawnSync(candidate, versionArgs, { encoding: "utf8", timeout: 5_000 });
-  return probe.status === 0;
-}
+// Every spawn below names a fixed executable: "git", or a qlty / gitleaks binary
+// resolved once from fixed candidate locations. No command or argument is ever
+// built from hook input, and shell is always false (arguments are passed as an
+// array, never through a shell).
+const SPAWN_BASE = { encoding: "utf8", shell: false };
 
 function findQlty() {
   const exe = process.platform === "win32" ? "qlty.exe" : "qlty";
-  const candidates = [exe, path.join(os.homedir(), ".qlty", "bin", exe)];
-  return candidates.find((c) => runs(c, ["--version"])) ?? null;
+  for (const candidate of [exe, path.join(os.homedir(), ".qlty", "bin", exe)]) {
+    if (spawnSync(candidate, ["--version"], { ...SPAWN_BASE, timeout: 5_000 }).status === 0) return candidate;
+  }
+  return null;
 }
 
 // PATH first; then winget's package folder on Windows, because a winget install
@@ -76,14 +79,21 @@ function findGitleaks() {
       if (dir.startsWith("Gitleaks.Gitleaks")) candidates.push(path.join(wingetPackages, dir, exe));
     }
   }
-  return candidates.find((c) => runs(c, ["version"])) ?? null;
+  for (const candidate of candidates) {
+    if (spawnSync(candidate, ["version"], { ...SPAWN_BASE, timeout: 5_000 }).status === 0) return candidate;
+  }
+  return null;
 }
 
-function run(cmd, args, cwd, timeout) {
-  const result = spawnSync(cmd, args, { cwd, encoding: "utf8", timeout, maxBuffer: 16 << 20 });
+function settle(result) {
   const timedOut = result.error?.code === "ETIMEDOUT" || Boolean(result.signal);
   return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "", timedOut };
 }
+
+const runOptions = (cwd, timeout) => ({ ...SPAWN_BASE, cwd, timeout, maxBuffer: 16 << 20 });
+const runGit = (args, cwd, timeout) => settle(spawnSync("git", args, runOptions(cwd, timeout)));
+const runQlty = (args, cwd, timeout) => settle(spawnSync(QLTY, args, runOptions(cwd, timeout)));
+const runGitleaks = (args, cwd, timeout) => settle(spawnSync(GITLEAKS, args, runOptions(cwd, timeout)));
 
 function clip(text) {
   return text.length > MAX_SECTION_CHARS
@@ -92,7 +102,7 @@ function clip(text) {
 }
 
 function gitLines(args, cwd) {
-  const r = run("git", args, cwd, 5_000);
+  const r = runGit(args, cwd, 5_000);
   return r.status === 0 ? r.stdout.split(/\r?\n/).filter(Boolean) : null;
 }
 
@@ -115,7 +125,8 @@ const projectDir = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
 if (!fs.existsSync(path.join(projectDir, ".qlty", "qlty.toml"))) allow();
 
 const notes = [];
-const qlty = findQlty();
+const QLTY = findQlty();
+const qlty = QLTY;
 
 // 1. Lint (qlty exits 1 when it found issues; anything else non-zero is qlty failing).
 let checkReport = "";
@@ -123,7 +134,7 @@ let checkLines = "";
 let checkDirty = false;
 let checkTimedOut = false;
 if (qlty) {
-  const check = run(qlty, ["check", "--no-progress", "--no-upgrade-check"], projectDir, remaining() - GITLEAKS_RESERVE_MS);
+  const check = runQlty(["check", "--no-progress", "--no-upgrade-check"], projectDir, remaining() - GITLEAKS_RESERVE_MS);
   checkTimedOut = check.timedOut;
   if (check.timedOut) {
     notes.push("qlty check did not finish in time; run `qlty check` before committing.");
@@ -148,7 +159,7 @@ if (qlty) {
   if (checkTimedOut || smellsBudget < 1_000 || (checkDirty && smellsBudget < SMELLS_MIN_MS)) {
     notes.push("qlty smells skipped (time budget); run `qlty smells` before marking the PR ready.");
   } else {
-    const smells = run(qlty, ["smells", "--quiet", "--no-snippets", "--no-upgrade-check"], projectDir, smellsBudget);
+    const smells = runQlty(["smells", "--quiet", "--no-snippets", "--no-upgrade-check"], projectDir, smellsBudget);
     if (smells.timedOut) {
       notes.push("qlty smells did not finish in time; run `qlty smells` before marking the PR ready.");
     } else if (smells.status === 0) {
@@ -166,7 +177,8 @@ if (qlty) {
 // repo-relative.
 let secretsReport = "";
 let secretsKey = "";
-const gitleaks = findGitleaks();
+const GITLEAKS = findGitleaks();
+const gitleaks = GITLEAKS;
 const files = gitleaks ? changedFiles(projectDir) : null;
 if (gitleaks && files === null) {
   notes.push("gitleaks skipped (could not list changed files).");
@@ -189,7 +201,7 @@ if (gitleaks && files === null) {
     // would miss the repo's config (path allowlists etc.); pass it explicitly.
     const config = path.join(projectDir, ".gitleaks.toml");
     if (fs.existsSync(config)) args.push("-c", config);
-    const leaks = run(gitleaks, args, tmp, Math.max(remaining(), 1_000));
+    const leaks = runGitleaks(args, tmp, Math.max(remaining(), 1_000));
     if (leaks.timedOut) {
       notes.push("gitleaks did not finish in time; run `gitleaks dir .` before committing.");
     } else if (leaks.status !== 0) {
