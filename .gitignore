@@ -56,9 +56,9 @@ migration-backups/
 !/.claude/settings.json
 !/.claude/hooks/
 
-# WyCo-standard reference docs — kept locally for my own reference but not
-# committed to the public repo. Canonical copies live in
-# C:\Users\benco\code\Ways of Working\
+# WyCo-standard reference docs — never committed to the public repo. Canonical
+# copies live in C:\Users\benco\code\wyco-wow\ (the old Ways of Working folder
+# is a frozen README-only stub since 2026-10-18).
 docs/Ways-of-Working.md
 docs/WYCO-DIGITAL-STYLE-GUIDE.md
 docs/Tech-Stack.md
